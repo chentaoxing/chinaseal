@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import base64
 import ipaddress
 import json
 import os
@@ -20,14 +21,16 @@ from pathlib import Path
 import chinaseal
 from .outlines import OutlineError
 
-REPO_URL = "https://github.com/chentaoxing/chinaseal"
+REPO_URL = "https://atomgit.com/chentaoxing/chinaseal"
 REPO = "chentaoxing/chinaseal"
 FONT_EXTS = (".ttf", ".otf", ".ttc", ".zip")
 ALLOWED_HOSTS = {
+    "api.atomgit.com", "atomgit.com",
     "gitee.com",
     "api.github.com", "github.com", "objects.githubusercontent.com",
     "raw.githubusercontent.com", "codeload.github.com",
 }
+ATOMGIT_API = "https://api.atomgit.com/api/v5"
 
 
 def validate_url(url: str) -> str:
@@ -67,6 +70,30 @@ def user_fonts_dir() -> Path:
     d = Path.home() / "ChinaSeal" / "fonts"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _atomgit_contents(repo: str, path: str, ref: str = "main") -> bytes:
+    """匿名读取仓库文件内容（base64 JSON 解码）。"""
+    url = f"{ATOMGIT_API}/repos/{repo}/contents/{path}"
+    if ref:
+        url += f"?ref={ref}"
+    with _request(validate_url(url)) as r:
+        data = json.load(r)
+    if data.get("encoding") == "base64":
+        return base64.b64decode(data["content"])
+    return str(data.get("content", "")).encode("utf-8")
+
+
+def _fetch_atomgit_manifest(repo: str) -> tuple:
+    """AtomGit 源：仓库根 manifest.json 定义版本与字体清单。"""
+    manifest = json.loads(_atomgit_contents(repo, "manifest.json"))
+    version = str(manifest.get("version", "0"))
+    assets = []
+    for f in manifest.get("fonts", []):
+        assets.append({"name": f.get("name") or os.path.basename(f["file"]),
+                       "size": int(f.get("size", 0)),
+                       "src": "atomgit", "path": f["file"], "ref": f.get("ref", "main")})
+    return f"v{version}", assets
 
 
 def _fetch_release(src: str, repo: str) -> tuple:
@@ -126,8 +153,13 @@ def latest_version(repo: str = REPO, prefer: str = "gitee") -> str:
     raise RuntimeError("所有下载源均获取失败。\n" + "\n".join(errors))
 
 
-def download_asset(url: str, dest_dir: Path, progress=None) -> list:
-    """下载并落盘；.zip 自动解出字体文件。返回新字体文件路径列表。"""
+def download_asset(url, dest_dir: Path, progress=None) -> list:
+    """下载并落盘；.zip 自动解出字体文件。返回新字体文件路径列表。
+
+    url 可为 https 直链，或 AtomGit 清单条目（dict: src=atomgit + path）。
+    """
+    if isinstance(url, dict) and url.get("src") == "atomgit":
+        return _download_atomgit_file(url, dest_dir, progress)
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     name = os.path.basename(urllib.parse.urlparse(url).path)
@@ -156,6 +188,19 @@ def download_asset(url: str, dest_dir: Path, progress=None) -> list:
                     out.append(target)
         dest.unlink()
         return out
+    return [dest]
+
+
+def _download_atomgit_file(asset: dict, dest_dir: Path, progress=None) -> list:
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / os.path.basename(asset["path"])
+    part = dest.with_suffix(dest.suffix + ".part")
+    data = _atomgit_contents(asset["path"], ref=asset.get("ref", "main"))
+    if progress:
+        progress(len(data), len(data))
+    part.write_bytes(data)
+    part.replace(dest)
     return [dest]
 
 
