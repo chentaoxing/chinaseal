@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# Copyright (C) 2024-2026 chentaoxing <chentaoxing@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-only
 """统一几何：字形轮廓 → 印面毫米坐标系路径（y 向下，原点=印面左上角）。
 
