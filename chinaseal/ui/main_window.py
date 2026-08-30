@@ -8,13 +8,18 @@ import os
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QSettings, QPointF
+import os
+import sys
+
+from PySide6.QtCore import QThread, QTimer, Signal
 from PySide6.QtGui import (QAction, QKeySequence, QPainter, QColor, QPen, QFont,
                            QUndoStack, QIcon, QPixmap)
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QGroupBox,
     QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox, QCheckBox, QPushButton,
     QLabel, QFileDialog, QMessageBox, QSlider, QScrollArea, QSizePolicy,
-    QToolBar, QStatusBar, QApplication, QDialog, QPushButton, QHBoxLayout)
+    QToolBar, QStatusBar, QApplication, QDialog, QPushButton, QHBoxLayout,
+    QProgressDialog)
 
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
 
@@ -25,6 +30,7 @@ from ..core import layout as L
 from ..core import downloader as D
 from ..core.font_manager import is_free_family
 from ..core.resources import logo_path
+from ..core import updater as U
 import chinaseal
 from ..core.model import READINGS as _READINGS
 from ..core.layout import LayoutError, build_geometry
@@ -97,6 +103,8 @@ class MainWindow(QMainWindow):
         self._load_settings()
         self.refresh()
         self.canvas.fit_seal()
+        # 启动自动检测更新（可在弹窗中关闭；3 秒延迟避免阻塞启动）
+        QTimer.singleShot(3000, self._startup_update_check)
 
     # ---------------- UI 构建 ----------------
 
@@ -376,24 +384,141 @@ class MainWindow(QMainWindow):
             self.params.font_family = dlg.added_families[0]
             self.refresh()
 
-    def on_check_update(self):
+    def on_check_update(self, silent: bool = False):
+        """检测更新：silent=True 时（启动自动检测）不弹"已是最新/失败"，仅发现新版才提示。"""
         from PySide6.QtWidgets import QMessageBox
         repo = self.settings.value("download/repo", D.REPO) or D.REPO
         try:
-            latest = D.latest_version(repo)
+            tag, assets = U.get_latest_release(repo)
         except Exception as e:
-            QMessageBox.warning(self, "检测更新失败",
-                                "无法连接更新服务器（GitHub/AtomGit）：\n" + str(e) +
-                                "\n\n可手动访问：" + D.REPO_URL + "/releases")
+            if not silent:
+                QMessageBox.warning(self, "检测更新失败",
+                                    "无法连接更新服务器（GitHub/AtomGit）：\n" + str(e) +
+                                    "\n\n可手动访问：" + D.REPO_URL + "/releases")
+            else:
+                self.status.showMessage("启动检测更新：服务器不可达，已跳过", 5000)
             return
-        if D.version_newer(latest, chinaseal.__version__):
-            QMessageBox.information(self, "发现新版本",
-                "当前版本：v" + chinaseal.__version__ +
-                "\n最新版本：v" + latest +
-                "\n\n请前往下载：" + D.REPO_URL + "/releases")
-        else:
-            QMessageBox.information(self, "已是最新",
-                "当前版本 v" + chinaseal.__version__ + " 已是最新。")
+        if not tag:
+            if not silent:
+                QMessageBox.warning(self, "检测更新失败", "发布服务器未返回版本信息。")
+            return
+        if not U.version_newer(tag, chinaseal.__version__):
+            if not silent:
+                QMessageBox.information(self, "已是最新",
+                    "当前版本 v" + chinaseal.__version__ + " 已是最新。")
+            return
+        asset = U.find_portable_asset(assets)
+        if asset is None:
+            QMessageBox.information(self, "发现新版本 v" + tag,
+                "新版本已发布，但便携包尚未上传。\n请前往：" + D.REPO_URL + "/releases")
+            return
+
+        self._update_tag = tag
+        self._update_asset_url = asset.get("browser_download_url") or asset.get("url")
+        box = QMessageBox(QMessageBox.Icon.Question, "发现新版本",
+                          "当前版本 v" + chinaseal.__version__ + "，最新版本 v" + tag +
+                          "（" + f"{asset.get('size', 0)/1e6:.1f}" + " MB）。\n是否现在下载更新？",
+                          parent=self)
+        from PySide6.QtWidgets import QCheckBox
+        cb = QCheckBox("每次启动自动检测更新")
+        cb.setChecked(self.settings.value("update/auto_check", True, type=bool))
+        box.setCheckBox(cb)
+        btn_dl = box.addButton("下载更新", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("稍后", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        self.settings.setValue("update/auto_check", cb.isChecked())
+        if box.clickedButton() is not btn_dl:
+            return
+        self._download_update(asset, tag)
+
+    def _download_update(self, asset: dict, tag: str):
+        """后台下载更新包到暂存目录，完成后询问安装。"""
+        from PySide6.QtWidgets import QProgressDialog
+        url = asset.get("browser_download_url") or asset.get("url")
+        dest = os.path.join(U.staging_dir(), f"ChinaSeal-{tag}-portable.zip")
+        self._update_dest = dest
+        self._update_tag = tag
+        prog = QProgressDialog(f"正在下载 v{tag} 更新包…", None, 0, 100, self)
+        prog.setWindowTitle("软件更新")
+        prog.setWindowModality(Qt.WindowModality.WindowModal)
+        prog.setMinimumDuration(0)
+        prog.show()
+
+        class _W(QThread):
+            progress = Signal(int, int)
+            done = Signal(str)
+            failed = Signal(object)
+
+            def __init__(w_self):
+                super().__init__(prog)
+                w_self._url, w_self._dest = url, dest
+
+            def run(w_self):
+                try:
+                    U.download_to_file(w_self._url, w_self._dest,
+                                       progress=lambda d, t: w_self.progress.emit(d, t))
+                    w_self.done.emit(w_self._dest)
+                except Exception as e:
+                    w_self.failed.emit(str(e))
+
+        self._update_dl = _W()
+
+        def on_prog(d, t):
+            prog.setValue(int(d * 100 / max(1, t)))
+
+        def on_done(path):
+            prog.close()
+            self._log(f"更新包下载完成：{path}")
+            self._prompt_install(path, tag)
+
+        def on_fail(err):
+            prog.close()
+            self._log(f"更新包下载失败：{err}")
+            QMessageBox.warning(self, "下载失败", "更新包下载失败：\n" + err)
+
+        self._update_dl.progress.connect(on_prog)
+        self._update_dl.done.connect(on_done)
+        self._update_dl.failed.connect(on_fail)
+        self._update_dl.start()
+
+    def _prompt_install(self, zip_path: str, tag: str):
+        """下载完成后询问是否立即安装（生成 helper 并重启）。"""
+        from PySide6.QtWidgets import QMessageBox
+        frozen = getattr(sys, "frozen", False)
+        size_mb = os.path.getsize(zip_path) / 1e6 if os.path.exists(zip_path) else 0
+        box = QMessageBox(QMessageBox.Icon.Question, "安装更新",
+                          f"更新包已下载（{size_mb:.1f} MB）。\n"
+                          "点击「立即安装」后，本程序将关闭并自动完成覆盖升级，然后重新启动。",
+                          parent=self)
+        btn_now = box.addButton("立即安装并重启", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("稍后手动安装", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() is not btn_now:
+            QMessageBox.information(self, "已保存更新包",
+                                    "更新包位置：\n" + zip_path +
+                                    "\n关闭本程序后，解压覆盖安装目录即可完成升级。")
+            return
+        if not frozen:
+            QMessageBox.warning(self, "开发模式",
+                                "当前为源码运行，无法自动覆盖安装。\n更新包位置：" + zip_path)
+            return
+        try:
+            app_dir = U.app_dir()
+            helper = os.path.join(U.staging_dir(), "ChinaSeal-Update.bat")
+            U.write_helper_bat(app_dir, zip_path, helper)
+            import subprocess as _sp
+            _sp.Popen(["cmd", "/c", helper, zip_path], cwd=app_dir,
+                      creationflags=0x00000008 | 0x00000200)  # DETACHED_PROCESS | NEW_PG
+            self._log(f"启动更新 helper：{helper}")
+            QApplication.quit()
+        except Exception as e:
+            QMessageBox.critical(self, "安装失败",
+                                 "更新启动失败：\n" + str(e) +
+                                 "\n\n可手动解压更新包覆盖安装目录。")
+
+    def _startup_update_check(self):
+        if self.settings.value("update/auto_check", True, type=bool):
+            self.on_check_update(silent=True)
 
     def on_open_log(self):
         import subprocess as _sp

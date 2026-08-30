@@ -40,12 +40,12 @@ def validate_url(url: str) -> str:
     return url
 
 
-def safe_path(raw: str) -> str:
-    """规范化路径、禁止 ..、限定受控扩展。"""
+def safe_path(raw: str, is_dir: bool = False) -> str:
+    """规范化路径、禁止 ..；文件限定受控扩展（目录免检）。"""
     p = Path(raw).resolve()
     if any(part == ".." for part in p.parts):
         raise ValueError(f"路径不允许包含 ..：{p}")
-    if p.suffix.lower() not in ALLOWED_EXTS:
+    if not is_dir and p.suffix.lower() not in ALLOWED_EXTS:
         raise ValueError(f"文件类型不在白名单：{p}")
     return str(p)
 
@@ -106,13 +106,13 @@ def download_to_file(url: str, dest_path: str, progress=None) -> None:
 
 def app_dir() -> str:
     """返回 ChinaSeal.exe 所在目录（PyInstaller onedir 形态）。"""
-    return safe_path(os.path.dirname(os.path.abspath(sys.executable)))
+    return safe_path(os.path.dirname(os.path.abspath(sys.executable)), is_dir=True)
 
 
 def staging_dir() -> str:
     d = Path(tempfile.gettempdir()) / "ChinaSeal-Update"
     d.mkdir(parents=True, exist_ok=True)
-    return safe_path(str(d))
+    return safe_path(str(d), is_dir=True)
 
 
 def write_helper_bat(app_dir: str, zip_path: str, out_path: str) -> str:

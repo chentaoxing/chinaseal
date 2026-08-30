@@ -3,7 +3,7 @@
 [![License: GPL-3.0-only](https://img.shields.io/badge/License-GPL--3.0--only-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)]()
 [![Python: 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)]()
-[![Release: v0.2.2](https://img.shields.io/badge/Release-v0.2.2-orange.svg)](https://github.com/chentaoxing/chinaseal/releases)
+[![Release](https://img.shields.io/github/v/release/chentaoxing/chinaseal)](https://github.com/chentaoxing/chinaseal/releases)
 
 Copyright © 2024-2026 chentaoxing <chentaoxing@gmail.com>, licensed under [GPL-3.0-only](LICENSE).
 
@@ -62,6 +62,10 @@ Copyright © 2024-2026 chentaoxing <chentaoxing@gmail.com>, licensed under [GPL-
 
 Copyright © 2024-2026 chentaoxing <chentaoxing@gmail.com>. 源代码以 [GNU General Public License v3.0 only](LICENSE) 授权发布。
 SPDX-License-Identifier: GPL-3.0-only。
+
+## 更新日志
+
+见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 第三方组件致谢
 
