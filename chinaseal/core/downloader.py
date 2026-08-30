@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# Copyright (C) 2024-2026 chentaoxing <chentaoxing@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-only
-"""字体下载器：从国内源（Gitee）优先拉取免费开源字体，GitHub 兜底。
+"""字体下载器：从 GitHub 拉取免费开源字体，AtomGit 兜底。
 
 软件发布/更新地址：https://github.com/chentaoxing/chinaseal
-字体源：Gitee（码云）Release 附件优先，GitHub Release 兜底。
+字体源：GitHub manifest（主），AtomGit manifest（国内兜底）。
 安全约束：仅 https；主机白名单；解析 IP 拒绝私网/环回/链路本地；
 重定向目标逐一过同样的校验。
 """
@@ -29,7 +29,6 @@ REPO = "chentaoxing/chinaseal"
 FONT_EXTS = (".ttf", ".otf", ".ttc", ".zip")
 ALLOWED_HOSTS = {
     "api.atomgit.com", "atomgit.com",
-    "gitee.com",
     "api.github.com", "github.com", "objects.githubusercontent.com",
     "raw.githubusercontent.com", "codeload.github.com",
 }
@@ -75,12 +74,12 @@ def user_fonts_dir() -> Path:
     return d
 
 
-def _atomgit_contents(repo: str, path: str, ref: str = "main") -> bytes:
+def _atomgit_contents(repo: str, path: str, ref: str = "main", timeout: int = 15) -> bytes:
     """匿名读取仓库文件内容（base64 JSON 解码）。"""
     url = f"{ATOMGIT_API}/repos/{repo}/contents/{path}"
     if ref:
         url += f"?ref={ref}"
-    with _request(validate_url(url)) as r:
+    with _request(validate_url(url), timeout=timeout) as r:
         data = json.load(r)
     if data.get("encoding") == "base64":
         return base64.b64decode(data["content"])
@@ -102,24 +101,24 @@ def _github_contents(repo: str, path: str, ref: str = "main") -> bytes:
     raise RuntimeError(f"GitHub contents 不可用: {path}")
 
 
-def _fetch_github_manifest(repo: str) -> tuple:
+def _fetch_github_manifest(repo: str, timeout: int = 8) -> tuple:
     """GitHub 源：仓库根 manifest.json 定义版本与字体清单。"""
-    manifest = json.loads(_github_contents(repo, "manifest.json"))
+    manifest = json.loads(_github_contents(repo, "manifest.json", timeout=timeout))
     version = str(manifest.get("version", "0"))
     assets = []
     for f in manifest.get("fonts", []):
         assets.append({"name": f.get("name") or os.path.basename(f["file"]),
                        "size": int(f.get("size", 0)),
                        "src": "github", "repo": repo,
-                       "path": f["file"],
+                       "path": f"fonts_repo/{f['file']}",
                        "ref": f.get("ref", "main")})
     return f"v{version}", assets
 
 
 
-def _fetch_atomgit_manifest(repo: str) -> tuple:
+def _fetch_atomgit_manifest(repo: str, timeout: int = 15) -> tuple:
     """AtomGit 源：fonts_repo/manifest.json 定义版本与字体清单。"""
-    manifest = json.loads(_atomgit_contents(repo, "fonts_repo/manifest.json"))
+    manifest = json.loads(_atomgit_contents(repo, "fonts_repo/manifest.json", timeout=timeout))
     version = str(manifest.get("version", "0"))
     assets = []
     for f in manifest.get("fonts", []):
@@ -132,12 +131,8 @@ def _fetch_atomgit_manifest(repo: str) -> tuple:
 
 
 def _fetch_release(src: str, repo: str) -> tuple:
-    if src == "gitee":
-        if "/" not in repo:
-            raise ValueError("Gitee 仓库路径格式应为：用户名/仓库名")
-        url = f"https://gitee.com/api/v5/repos/{repo}/releases/latest"
-    else:
-        url = f"https://api.github.com/repos/{repo}/releases/latest"
+    # 源码仅支持 GitHub Release（AtomGit 走 manifest 路径，不经此函数）
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
     with _request(validate_url(url)) as r:
         data = json.load(r)
     tag = str(data.get("tag_name") or data.get("name") or "")
@@ -152,19 +147,23 @@ def _fetch_release(src: str, repo: str) -> tuple:
 
 
 def list_release_assets(repo: str = REPO, prefer: str = "github") -> tuple:
-    """返回 (tag, [asset])。AtomGit 优先、Gitee/GitHub 兜底；全失败抛异常。"""
+    """返回 (tag, [asset])。AtomGit 优先、GitHub 兜底；全失败抛异常。"""
     tag, assets, _ = list_release_assets_with_source(repo, prefer)
     return tag, assets
 
 
-def list_release_assets_with_source(repo: str = REPO, prefer: str = "github") -> tuple:
-    """同 list_release_assets，但额外返回命中的源。"""
-    chain = {"github": _fetch_github_manifest,
-             "atomgit": _fetch_atomgit_manifest,
-             "gitee": lambda r: _fetch_release("gitee", r),
-             "github_release": lambda r: _fetch_release("github", r)}
-    rest = [s for s in ("github", "atomgit", "gitee", "github_release") if s != prefer]
-    order = [prefer if prefer in chain else "github"] + rest
+def list_release_assets_with_source(repo: str = REPO, prefer: str = "github",
+                                    probe_timeout: int = 8, strict: bool = False) -> tuple:
+    """同 list_release_assets，但额外返回命中的源。
+
+    prefer：优先尝试的源（通常是上次成功的源）。非首选源用 probe_timeout 快速失败。
+    """
+    chain = {"github": lambda r: _fetch_github_manifest(r, timeout=probe_timeout),
+             "atomgit": lambda r: _fetch_atomgit_manifest(r, timeout=probe_timeout)}
+    rest = [s for s in ("github", "atomgit") if s != prefer]
+    order = [prefer if prefer in chain else "github"]
+    if not strict:
+        order += rest
     errors = []
     for src in order:
         try:
@@ -248,6 +247,38 @@ def _download_github_file(asset: dict, dest_dir: Path, progress=None) -> list:
     part.write_bytes(data)
     part.replace(dest)
     return [dest]
+
+
+def downloaded_record_path() -> str:
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "ChinaSeal")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "downloaded_fonts.json")
+
+
+def load_downloaded_records() -> dict:
+    """读取已下载字体记录：{字体文件名: {"family": ..., "time": ...}}。"""
+    try:
+        with open(downloaded_record_path(), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def is_downloaded(filename: str) -> bool:
+    return filename in load_downloaded_records()
+
+
+def record_downloaded_name(filename: str, family: str = "") -> None:
+    import datetime
+    rec = load_downloaded_records()
+    rec[filename] = {"family": family,
+                     "time": datetime.datetime.now().isoformat(timespec="seconds")}
+    tmp = downloaded_record_path() + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(rec, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, downloaded_record_path())
 
 
 def register_downloaded(paths, font_mgr) -> list:
