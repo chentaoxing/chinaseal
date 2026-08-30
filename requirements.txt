@@ -1,0 +1,6 @@
+PySide6>=6.6
+fonttools>=4.50
+reportlab>=4.0
+pillow>=10.0
+pytest>=8.0
+pyinstaller>=6.0
