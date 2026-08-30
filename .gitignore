@@ -15,3 +15,4 @@ fonts_repo/*.part
 Thumbs.db
 *.egg-info/
 build_tools/
+.tmp_*.py
