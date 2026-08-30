@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# Copyright (C) 2024-2026 chentaoxing <chentaoxing@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-only
 """排版引擎（纯数学，不依赖 Qt）。
 
