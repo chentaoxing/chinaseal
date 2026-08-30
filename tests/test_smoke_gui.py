@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# Copyright (C) 2024-2026 chentaoxing <chentaoxing@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-only
 """GUI 离屏冒烟：主窗口构建 + 每条按钮链路（对话框全部 stub）。
 
@@ -189,13 +189,13 @@ def test_print_dialog_reject_safe(win, monkeypatch):
     win.on_print_calibration()
 
 
-def test_gitee_release_parse():
-    # Gitee v5 返回结构解析（不出网，纯函数级验证）
+def test_atomgit_release_parse():
+    # AtomGit manifest 解析（不出网，纯函数级验证）
     from chinaseal.core import downloader as D
     import json
     sample = {"tag_name": "v1.0", "assets": [
-        {"name": "fontA.ttf", "size": 100, "browser_download_url": "https://gitee.com/u/r/releases/download/1.0/fontA.ttf"},
-        {"name": "readme.md", "size": 1, "browser_download_url": "https://gitee.com/u/r/readme.md"}]}
+        {"name": "fontA.ttf", "size": 100, "browser_download_url": "https://atomgit.com/u/r/releases/download/1.0/fontA.ttf"},
+        {"name": "readme.md", "size": 1, "browser_download_url": "https://atomgit.com/u/r/readme.md"}]}
     tag = sample["tag_name"]
     assets = [a for a in sample["assets"] if a["name"].lower().endswith(D.FONT_EXTS)]
     assert tag == "v1.0" and len(assets) == 1 and assets[0]["name"] == "fontA.ttf"
@@ -212,7 +212,7 @@ def test_version_newer():
 def test_validate_url():
     from chinaseal.core import downloader as D
     assert D.validate_url("https://api.github.com/repos/x/y/releases/latest")
-    assert D.validate_url("https://gitee.com/api/v5/repos/x/y/releases/latest")
+    assert D.validate_url("https://api.atomgit.com/api/v5/repos/x/y/releases/latest")
     for bad in ("http://api.github.com/x", "https://127.0.0.1/x",
                 "https://192.168.1.1/x", "https://evil.example.com/x"):
         try:
@@ -220,6 +220,31 @@ def test_validate_url():
             raise AssertionError("should reject: " + bad)
         except ValueError:
             pass
+
+
+def test_font_dialog_has_checkboxes(win):
+    """回归：字体下载列表必须是复选框模式（v0.2.4 起）。"""
+    from chinaseal.ui.font_downloader import FontDownloaderDialog
+    dlg = FontDownloaderDialog(win.font_mgr)
+    try:
+        assert dlg.listw.selectionMode().name == "NoSelection"
+        # 等异步 fetch 完成（最多 30s）
+        import time as _t
+        t0 = _t.time()
+        while dlg._fetch.isRunning() and _t.time() - t0 < 30:
+            app = dlg.parent()  # noqa
+            from PySide6.QtWidgets import QApplication
+            QApplication.processEvents()
+            _t.sleep(0.05)
+        if dlg.listw.count() == 0:
+            import pytest
+            pytest.skip("网络不可达（GitHub 限流/超时），跳过 UI 回归")
+        it = dlg.listw.item(0)
+        from PySide6.QtCore import Qt
+        assert it.flags() & Qt.ItemFlag.ItemIsUserCheckable
+        assert it.checkState() == Qt.CheckState.Checked
+    finally:
+        dlg.close()
 
 
 def test_preview_has_ink(win):
