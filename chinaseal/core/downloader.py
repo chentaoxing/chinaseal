@@ -23,7 +23,8 @@ from pathlib import Path
 import chinaseal
 from .outlines import OutlineError
 
-REPO_URL = "https://atomgit.com/chentaoxing/chinaseal"
+REPO_URL = "https://github.com/chentaoxing/chinaseal"
+ATOMGIT_REPO_URL = "https://atomgit.com/chentaoxing/chinaseal"
 REPO = "chentaoxing/chinaseal"
 FONT_EXTS = (".ttf", ".otf", ".ttc", ".zip")
 ALLOWED_HOSTS = {
@@ -86,6 +87,36 @@ def _atomgit_contents(repo: str, path: str, ref: str = "main") -> bytes:
     return str(data.get("content", "")).encode("utf-8")
 
 
+def _github_contents(repo: str, path: str, ref: str = "main") -> bytes:
+    """GitHub 源：仓库内容（公开仓库匿名）。小文件用 base64 content，大文件用 download_url。"""
+    url = f"https://api.github.com/repos/{repo}/contents/{path}"
+    if ref:
+        url += f"?ref={ref}"
+    with _request(validate_url(url)) as r:
+        data = json.load(r)
+    if isinstance(data, dict) and data.get("encoding") == "base64" and "content" in data:
+        return base64.b64decode(data["content"])
+    if isinstance(data, dict) and data.get("download_url"):
+        with _request(validate_url(data["download_url"]), timeout=120) as r2:
+            return r2.read()
+    raise RuntimeError(f"GitHub contents 不可用: {path}")
+
+
+def _fetch_github_manifest(repo: str) -> tuple:
+    """GitHub 源：仓库根 manifest.json 定义版本与字体清单。"""
+    manifest = json.loads(_github_contents(repo, "manifest.json"))
+    version = str(manifest.get("version", "0"))
+    assets = []
+    for f in manifest.get("fonts", []):
+        assets.append({"name": f.get("name") or os.path.basename(f["file"]),
+                       "size": int(f.get("size", 0)),
+                       "src": "github", "repo": repo,
+                       "path": f["file"],
+                       "ref": f.get("ref", "main")})
+    return f"v{version}", assets
+
+
+
 def _fetch_atomgit_manifest(repo: str) -> tuple:
     """AtomGit 源：fonts_repo/manifest.json 定义版本与字体清单。"""
     manifest = json.loads(_atomgit_contents(repo, "fonts_repo/manifest.json"))
@@ -120,19 +151,20 @@ def _fetch_release(src: str, repo: str) -> tuple:
     return tag, assets
 
 
-def list_release_assets(repo: str = REPO, prefer: str = "atomgit") -> tuple:
+def list_release_assets(repo: str = REPO, prefer: str = "github") -> tuple:
     """返回 (tag, [asset])。AtomGit 优先、Gitee/GitHub 兜底；全失败抛异常。"""
     tag, assets, _ = list_release_assets_with_source(repo, prefer)
     return tag, assets
 
 
-def list_release_assets_with_source(repo: str = REPO, prefer: str = "atomgit") -> tuple:
+def list_release_assets_with_source(repo: str = REPO, prefer: str = "github") -> tuple:
     """同 list_release_assets，但额外返回命中的源。"""
-    chain = {"atomgit": _fetch_atomgit_manifest,
+    chain = {"github": _fetch_github_manifest,
+             "atomgit": _fetch_atomgit_manifest,
              "gitee": lambda r: _fetch_release("gitee", r),
-             "github": lambda r: _fetch_release("github", r)}
-    rest = [s for s in ("atomgit", "gitee", "github") if s != prefer]
-    order = [prefer if prefer in chain else "atomgit"] + rest
+             "github_release": lambda r: _fetch_release("github", r)}
+    rest = [s for s in ("github", "atomgit", "gitee", "github_release") if s != prefer]
+    order = [prefer if prefer in chain else "github"] + rest
     errors = []
     for src in order:
         try:
@@ -145,7 +177,7 @@ def list_release_assets_with_source(repo: str = REPO, prefer: str = "atomgit") -
     raise RuntimeError("所有下载源均获取失败。\n" + "\n".join(errors))
 
 
-def latest_version(repo: str = REPO, prefer: str = "atomgit") -> str:
+def latest_version(repo: str = REPO, prefer: str = "github") -> str:
     tag, _, _ = list_release_assets_with_source(repo, prefer)
     return tag.lstrip("vV")
 
@@ -155,8 +187,12 @@ def download_asset(url, dest_dir: Path, progress=None) -> list:
 
     url 可为 https 直链，或 AtomGit 清单条目（dict: src=atomgit + path）。
     """
-    if isinstance(url, dict) and url.get("src") == "atomgit":
-        return _download_atomgit_file(url, dest_dir, progress)
+    if isinstance(url, dict):
+        src = url.get("src")
+        if src == "atomgit":
+            return _download_atomgit_file(url, dest_dir, progress)
+        if src == "github":
+            return _download_github_file(url, dest_dir, progress)
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     name = os.path.basename(urllib.parse.urlparse(url).path)
@@ -194,6 +230,19 @@ def _download_atomgit_file(asset: dict, dest_dir: Path, progress=None) -> list:
     dest = dest_dir / os.path.basename(asset["path"])
     part = dest.with_suffix(dest.suffix + ".part")
     data = _atomgit_contents(asset["repo"], asset["path"], ref=asset.get("ref", "main"))
+    if progress:
+        progress(len(data), len(data))
+    part.write_bytes(data)
+    part.replace(dest)
+    return [dest]
+
+
+def _download_github_file(asset: dict, dest_dir: Path, progress=None) -> list:
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / os.path.basename(asset["path"])
+    part = dest.with_suffix(dest.suffix + ".part")
+    data = _github_contents(asset["repo"], asset["path"], ref=asset.get("ref", "main"))
     if progress:
         progress(len(data), len(data))
     part.write_bytes(data)

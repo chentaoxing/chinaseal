@@ -1,0 +1,38 @@
+name: mirror-to-atomgit
+# GitHub 主仓 → AtomGit 国内镜像。手动 push、tag、PR merge 都会触发。
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    # 不要并发，防止多次同步抢着推
+    concurrency:
+      group: mirror-atomgit
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Add AtomGit remote
+        run: |
+          git config user.name  "chentaoxing"
+          git config user.email "[email protected]"
+          git remote add atomgit \
+            "https://chentaoxing:${ATOMGIT_TOKEN}@atomgit.com/chentaoxing/chinaseal.git"
+        env:
+          ATOMGIT_TOKEN: ${{ secrets.ATOMGIT_TOKEN }}
+
+      - name: Mirror refs to AtomGit
+        run: |
+          # 先把远程 ref 拉一份，避免镜像推错
+          git fetch atomgit --prune || true
+          # 推送所有分支与 tag
+          git push atomgit --all
+          git push atomgit --tags --force
