@@ -23,7 +23,7 @@ jobs:
       - name: Add AtomGit remote
         run: |
           git config user.name  "chentaoxing"
-          git config user.email "[email protected]"
+          git config user.email "chentaoxing@gmail.com"
           git remote add atomgit \
             "https://chentaoxing:${ATOMGIT_TOKEN}@atomgit.com/chentaoxing/chinaseal.git"
         env:

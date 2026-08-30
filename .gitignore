@@ -16,3 +16,4 @@ Thumbs.db
 *.egg-info/
 build_tools/
 .tmp_*.py
+*-portable.zip
