@@ -6,3 +6,4 @@ dist/
 *.spec
 out/
 logs/
+fonts_repo/*.part

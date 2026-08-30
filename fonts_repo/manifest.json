@@ -1,0 +1,50 @@
+{
+ "version": "0.2.2",
+ "fonts": [
+  {
+   "name": "Liu Jian Mao Cao",
+   "file": "LiuJianMaoCao-Regular.ttf",
+   "size": 4951804
+  },
+  {
+   "name": "Long Cang",
+   "file": "LongCang-Regular.ttf",
+   "size": 5162508
+  },
+  {
+   "name": "Ma Shan Zheng",
+   "file": "MaShanZheng-Regular.ttf",
+   "size": 5857936
+  },
+  {
+   "name": "Noto Sans CJK SC",
+   "file": "NotoSansCJKsc-Regular.otf",
+   "size": 16437364
+  },
+  {
+   "name": "Smiley Sans",
+   "file": "SmileySans-Oblique.ttf",
+   "size": 2629764
+  },
+  {
+   "name": "ZCOOL KuaiLe",
+   "file": "ZCOOLKuaiLe-Regular.ttf",
+   "size": 1514968
+  },
+  {
+   "name": "ZCOOL QingKe HuangYou",
+   "file": "ZCOOLQingKeHuangYou-Regular.ttf",
+   "size": 8328684
+  },
+  {
+   "name": "站酷小薇体",
+   "file": "ZCOOLXiaoWei-Regular.ttf",
+   "size": 6313808
+  },
+  {
+   "name": "Zhi Mang Xing",
+   "file": "ZhiMangXing-Regular.ttf",
+   "size": 4063532
+  }
+ ]
+}
