@@ -5,7 +5,7 @@
 [![Python: 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)]()
 [![Release: v0.2.2](https://img.shields.io/badge/Release-v0.2.2-orange.svg)](https://github.com/chentaoxing/chinaseal/releases)
 
-Copyright © 2024-2026 chentaoxing <[email protected]>, licensed under [GPL-3.0-only](LICENSE).
+Copyright © 2024-2026 chentaoxing <chentaoxing@gmail.com>, licensed under [GPL-3.0-only](LICENSE).
 
 > 面向**实体篆刻生产流程**的数字印稿设计工具：输入文字 → 选字体 → 生成印面 → 镜像 → 毫米级真实尺寸 → 打印上石。
 > 不是电子公章生成器。完全离线运行（检测更新/字体下载需联网）。
@@ -60,7 +60,7 @@ Copyright © 2024-2026 chentaoxing <[email protected]>, licensed under [GPL-3.0-
 
 ## 版权与许可
 
-Copyright © 2024-2026 chentaoxing <[email protected]>. 源代码以 [GNU General Public License v3.0 only](LICENSE) 授权发布。
+Copyright © 2024-2026 chentaoxing <chentaoxing@gmail.com>. 源代码以 [GNU General Public License v3.0 only](LICENSE) 授权发布。
 SPDX-License-Identifier: GPL-3.0-only。
 
 ## 第三方组件致谢
@@ -93,5 +93,5 @@ PySide6 (Qt) 以 LGPL-3.0-only 授权发布。本软件以 PyInstaller 打包为
 
 ## 作者
 
-chentaoxing <[email protected]>
+chentaoxing <chentaoxing@gmail.com>
 
