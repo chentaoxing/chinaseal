@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# Copyright (C) 2024-2026 chentaoxing <chentaoxing@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-only
 """渲染与导出：QPainter 光栅（预览/PNG/打印）+ reportlab 矢量 PDF + 校准页。"""
 from __future__ import annotations
