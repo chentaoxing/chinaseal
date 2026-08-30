@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# Copyright (C) 2024-2026 chentaoxing <chentaoxing@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-only
 """ChinaSeal · 中国篆刻印稿工坊"""
-__version__ = "0.2.0"
+__version__ = "0.3.3"
