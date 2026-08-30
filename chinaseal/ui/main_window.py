@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# Copyright (C) 2024-2026 chentaoxing <chentaoxing@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-only
 """ChinaSeal 主窗口。"""
 from __future__ import annotations
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
 
+import chinaseal
 from .canvas import SealCanvas, CharItem
 from .font_downloader import FontDownloaderDialog
 from ..core import layout as L
@@ -34,7 +35,7 @@ from ..core.outlines import OutlineError
 from ..core import export as E
 from ..core.paths import char_paths_mm, load_outlines, seal_box
 
-APP_TITLE = "象形科技 ChinaSeal-中国篆刻印稿工坊"
+APP_TITLE = "象形科技 ChinaSeal v" + chinaseal.__version__ + " - 中国篆刻印稿工坊"
 
 PRESETS = [
     ("方章 30×30mm", ("rect", 30, 30, False)),
@@ -150,10 +151,13 @@ class MainWindow(QMainWindow):
         # 关于（"适合窗口"按钮之后）
         tb.addSeparator()
         self.act_check_update = QAction("检测更新", self)
+        self.act_log = QAction("打开日志", self)
         self.act_about = QAction("关于", self)
         tb.addAction(self.act_check_update)
+        tb.addAction(self.act_log)
         tb.addAction(self.act_about)
         self.act_check_update.triggered.connect(self.on_check_update)
+        self.act_log.triggered.connect(self.on_open_log)
         self.act_about.triggered.connect(self.on_about)
 
         for a, fn in ((self.act_new, self.on_new), (self.act_open, self.on_open),
@@ -379,7 +383,7 @@ class MainWindow(QMainWindow):
             latest = D.latest_version(repo)
         except Exception as e:
             QMessageBox.warning(self, "检测更新失败",
-                                "无法连接更新服务器（Gitee/GitHub）：\n" + str(e) +
+                                "无法连接更新服务器（GitHub/AtomGit）：\n" + str(e) +
                                 "\n\n可手动访问：" + D.REPO_URL + "/releases")
             return
         if D.version_newer(latest, chinaseal.__version__):
@@ -390,6 +394,16 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.information(self, "已是最新",
                 "当前版本 v" + chinaseal.__version__ + " 已是最新。")
+
+    def on_open_log(self):
+        import subprocess as _sp
+        from PySide6.QtWidgets import QMessageBox as _QMB
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        log_path = os.path.join(base, "ChinaSeal", "chinatext.log")
+        if os.path.exists(log_path):
+            _sp.Popen(["notepad.exe", log_path])
+        else:
+            _QMB.information(self, "日志", "日志文件尚未生成：\n" + log_path)
 
     def on_about(self):
         dlg = AboutDialog(self)
@@ -960,7 +974,7 @@ class AboutDialog(QDialog):
 
         info = QLabel(
             "面向实体篆刻生产流程的数字印稿设计工具。"
-            "<br><br><b>湖南象形科技有限公司</b>"
+            "<br><br>开发者：chentaoxing <a href=\"mailto:chentaoxing@gmail.com\">chentaoxing@gmail.com</a>"
             "<br>版本与更新地址（点击打开）：<br>"
             "<a href='" + D.REPO_URL + "'>" + D.REPO_URL + "</a>"
             "<br><br><span style='color:#888;font-size:12px'>"
