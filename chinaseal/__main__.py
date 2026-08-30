@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# SPDX-License-Identifier: GPL-3.0-only
 """ChinaSeal 入口。
 
 - `python -m chinaseal`：包上下文

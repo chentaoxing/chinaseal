@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# SPDX-License-Identifier: GPL-3.0-only
 """印稿数据模型（SealParams / CharTransform）。"""
 from __future__ import annotations
 

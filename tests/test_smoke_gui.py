@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# SPDX-License-Identifier: GPL-3.0-only
 """GUI 离屏冒烟：主窗口构建 + 每条按钮链路（对话框全部 stub）。
 
 教训（来自 casting_studio）：GUI 冒烟必须覆盖每条按钮链路，不能只测渲染。

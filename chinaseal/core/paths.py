@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# SPDX-License-Identifier: GPL-3.0-only
 """统一几何：字形轮廓 → 印面毫米坐标系路径（y 向下，原点=印面左上角）。
 
 画布预览 / PNG 光栅 / 矢量 PDF 三端共用，保证"预览即所得、导出即所预"。

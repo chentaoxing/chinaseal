@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# SPDX-License-Identifier: GPL-3.0-only
 """字体下载器：从国内源（Gitee）优先拉取免费开源字体，GitHub 兜底。
 
 软件发布/更新地址：https://github.com/chentaoxing/chinaseal

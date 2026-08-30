@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# SPDX-License-Identifier: GPL-3.0-only
 """排版引擎（纯数学，不依赖 Qt）。
 
 输出：每个字的"格子"（中心点 mm 坐标 + 格子尺寸 mm + 字的旋转角度）。

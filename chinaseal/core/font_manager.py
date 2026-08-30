@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# SPDX-License-Identifier: GPL-3.0-only
 r"""字体管理：系统字体文件枚举、自定义字体注册、缺字检测。
 
 设计：以"字体文件"为中心（预览与导出的矢量管线需要文件路径）。

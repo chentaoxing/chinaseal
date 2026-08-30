@@ -7,3 +7,11 @@ dist/
 out/
 logs/
 fonts_repo/*.part
+.idea/
+.vscode/
+.pytest_cache/
+*.swp
+*.swo
+Thumbs.db
+*.egg-info/
+build_tools/

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# SPDX-License-Identifier: GPL-3.0-only
 """字形轮廓提取：fontTools 读取 TTF/OTF/TTC 轮廓，统一为线段/二次贝塞尔/三次贝塞尔记录。
 
 这是全部渲染管线的唯一几何来源：

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# SPDX-License-Identifier: GPL-3.0-only
 """生成验收样张：多种配置的 PNG/PDF 输出到 out/samples/。"""
 import os
 import sys

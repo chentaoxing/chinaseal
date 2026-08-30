@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (C) 2024-2026 chentaoxing <[email protected]>
+# SPDX-License-Identifier: GPL-3.0-only
 """字体下载对话框：Gitee（码云）优先、GitHub 兜底，下载免费开源字体并注册。"""
 from __future__ import annotations
 

@@ -1,7 +1,14 @@
-# ChinaSeal · 中国篆刻印稿工坊 v0.2.0
+# ChinaSeal · 中国篆刻印稿工坊
+
+[![License: GPL-3.0-only](https://img.shields.io/badge/License-GPL--3.0--only-blue.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)]()
+[![Python: 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)]()
+[![Release: v0.2.2](https://img.shields.io/badge/Release-v0.2.2-orange.svg)](https://github.com/chentaoxing/chinaseal/releases)
+
+Copyright © 2024-2026 chentaoxing <[email protected]>, licensed under [GPL-3.0-only](LICENSE).
 
 > 面向**实体篆刻生产流程**的数字印稿设计工具：输入文字 → 选字体 → 生成印面 → 镜像 → 毫米级真实尺寸 → 打印上石。
-> 不是电子公章生成器。完全离线运行（检测更新/字体下载需联网）。湖南象形科技有限公司。
+> 不是电子公章生成器。完全离线运行（检测更新/字体下载需联网）。
 
 ## 快速开始
 
@@ -18,7 +25,7 @@
 | 字体 | 扫描系统字体 + 「导入字体文件」支持 ttf/otf/ttc；**缺字检测**：缺字标红并阻止导出，杜绝静默替换 |
 | 内置字体 | 霞鹜文楷（简繁全覆盖）、思源宋体（Noto Serif SC）、LXGW Seal 小篆（预览版，覆盖字数有限）——开源/免费商用授权；列表默认**隐藏可能有商用风险的系统字体**（方正/汉仪/华文/华康/文鼎/蒙纳等），勾选"显示全部字体"可恢复 |
 | 字体下载 | 「下载并添加其他免费开源字体…」：从 GitHub 发布页拉取字体包（因软件体积限制不全部打包），下载到用户目录即点即用 |
-| 关于 | 标题行「关于」菜单：软件版本、检测更新（github.com/chentaoxing/chinaseal）、湖南象形科技有限公司 |
+| 关于 | 标题行「关于」菜单：软件版本、检测更新（github.com/chentaoxing/chinaseal）、作者信息 |
 | 章形 | 方形（长宽联动）、长方形（独立可调）、正圆形（直径可调），5-200mm；内置常用尺寸预设 |
 | 读序 | 现代横排（左→右）/ 传统竖读（右起，右上→右下→左上→左下）/ 回文环读（右上起逆时针）；画布可显示读序编号辅助核对 |
 | 装饰 | 边框（0-5mm，阴刻时边栏与底连为一体）；田字格（仅预览辅助，不导出） |
@@ -48,3 +55,43 @@
 
 ---
 源码：`E:\Agent\Date\ZCode\workspace\ChinaSeal\` · 需求共识：`docs/需求共识文档.md`
+
+---
+
+## 版权与许可
+
+Copyright © 2024-2026 chentaoxing <[email protected]>. 源代码以 [GNU General Public License v3.0 only](LICENSE) 授权发布。
+SPDX-License-Identifier: GPL-3.0-only。
+
+## 第三方组件致谢
+
+| 组件 | 用途 | 许可证 |
+|---|---|---|
+| [PySide6](https://doc.qt.io/qtforpython-6/) (Qt for Python) | GUI 框架 | LGPL-3.0-only |
+| [fontTools](https://github.com/fonttools/fonttools) | TrueType/OpenType 字体轮廓解析 | MIT |
+| [reportlab](https://www.reportlab.com/) | 矢量 PDF 导出 | BSD |
+| [Pillow](https://python-pillow.org/) | PNG 元数据写入 | HPND / MIT-CMU |
+| [pytest](https://docs.pytest.org/) | 测试框架（仅开发用） | MIT |
+| [PyInstaller](https://www.pyinstaller.org/) | 打包为独立 EXE（仅构建用） | GPL-2-or-later + 例外 |
+
+PySide6 (Qt) 以 LGPL-3.0-only 授权发布。本软件以 PyInstaller 打包为单目录绿色 EXE，Qt 的动态库以独立文件形式存在，符合 LGPL 关于“传播包含 LGPL 库的可执行作品”的要求。Qt 库源码及 LGPL 全文见 [Qt 官方](https://www.qt.io/licensing/)。
+
+## 内置字体（chinaseal/fonts/）
+
+| 字体 | 用途 | 许可证 |
+|---|---|---|
+| LXGW WenKai | 默认中文字体（简繁覆盖） | OFL-1.1 |
+| Noto Serif CJK SC | 思源宋体 | OFL-1.1 |
+| LXGW Seal | 小篆预览版 | OFL-1.1 |
+
+下载字体（fonts_repo/）：9 款免费开源中文字体供软件内下载（思源黑体 / 得意黑 / 站酷快乐体 / 站酷小薇 / 站酷庆科黄油 / 马善政楷 / 龙藏 / 之芒行书 / 柳建毛草），均为 OFL-1.1。
+
+## 仓库
+
+- 主仓库：[github.com/chentaoxing/chinaseal](https://github.com/chentaoxing/chinaseal)
+- 国内镜像：[atomgit.com/chentaoxing/chinaseal](https://atomgit.com/chentaoxing/chinaseal)（只读同步）
+
+## 作者
+
+chentaoxing <[email protected]>
+
