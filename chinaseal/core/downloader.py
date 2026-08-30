@@ -85,14 +85,16 @@ def _atomgit_contents(repo: str, path: str, ref: str = "main") -> bytes:
 
 
 def _fetch_atomgit_manifest(repo: str) -> tuple:
-    """AtomGit 源：仓库根 manifest.json 定义版本与字体清单。"""
-    manifest = json.loads(_atomgit_contents(repo, "manifest.json"))
+    """AtomGit 源：fonts_repo/manifest.json 定义版本与字体清单。"""
+    manifest = json.loads(_atomgit_contents(repo, "fonts_repo/manifest.json"))
     version = str(manifest.get("version", "0"))
     assets = []
     for f in manifest.get("fonts", []):
         assets.append({"name": f.get("name") or os.path.basename(f["file"]),
                        "size": int(f.get("size", 0)),
-                       "src": "atomgit", "path": f["file"], "ref": f.get("ref", "main")})
+                       "src": "atomgit", "repo": repo,
+                       "path": f"fonts_repo/{f['file']}",
+                       "ref": f.get("ref", "main")})
     return f"v{version}", assets
 
 
@@ -116,41 +118,34 @@ def _fetch_release(src: str, repo: str) -> tuple:
     return tag, assets
 
 
-def list_release_assets(repo: str = REPO, prefer: str = "gitee") -> tuple:
-    """返回 (tag, [asset])。Gitee 优先、GitHub 兜底；全失败抛异常。"""
-    order = ("gitee", "github") if prefer == "gitee" else ("github", "gitee")
+def list_release_assets(repo: str = REPO, prefer: str = "atomgit") -> tuple:
+    """返回 (tag, [asset])。AtomGit 优先、Gitee/GitHub 兜底；全失败抛异常。"""
+    tag, assets, _ = list_release_assets_with_source(repo, prefer)
+    return tag, assets
+
+
+def list_release_assets_with_source(repo: str = REPO, prefer: str = "atomgit") -> tuple:
+    """同 list_release_assets，但额外返回命中的源。"""
+    chain = {"atomgit": _fetch_atomgit_manifest,
+             "gitee": lambda r: _fetch_release("gitee", r),
+             "github": lambda r: _fetch_release("github", r)}
+    rest = [s for s in ("atomgit", "gitee", "github") if s != prefer]
+    order = [prefer if prefer in chain else "atomgit"] + rest
     errors = []
     for src in order:
         try:
-            return _fetch_release(src, repo)
+            tag, assets = chain[src](repo)
+            if assets:
+                return tag, assets, src
+            errors.append(f"{src}: 无字体附件")
         except Exception as e:
             errors.append(f"{src}: {e}")
     raise RuntimeError("所有下载源均获取失败。\n" + "\n".join(errors))
 
 
-def list_release_assets_with_source(repo: str = REPO, prefer: str = "gitee") -> tuple:
-    """同 list_release_assets，但额外返回命中的源（gitee/github）。"""
-    order = ("gitee", "github") if prefer == "gitee" else ("github", "gitee")
-    errors = []
-    for src in order:
-        try:
-            tag, assets = _fetch_release(src, repo)
-            return tag, assets, src
-        except Exception as e:
-            errors.append(f"{src}: {e}")
-    raise RuntimeError("所有下载源均获取失败。\n" + "\n".join(errors))
-
-
-def latest_version(repo: str = REPO, prefer: str = "gitee") -> str:
-    order = ("gitee", "github") if prefer == "gitee" else ("github", "gitee")
-    errors = []
-    for src in order:
-        try:
-            tag, _ = _fetch_release(src, repo)
-            return tag.lstrip("vV")
-        except Exception as e:
-            errors.append(f"{src}: {e}")
-    raise RuntimeError("所有下载源均获取失败。\n" + "\n".join(errors))
+def latest_version(repo: str = REPO, prefer: str = "atomgit") -> str:
+    tag, _, _ = list_release_assets_with_source(repo, prefer)
+    return tag.lstrip("vV")
 
 
 def download_asset(url, dest_dir: Path, progress=None) -> list:
@@ -196,7 +191,7 @@ def _download_atomgit_file(asset: dict, dest_dir: Path, progress=None) -> list:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / os.path.basename(asset["path"])
     part = dest.with_suffix(dest.suffix + ".part")
-    data = _atomgit_contents(asset["path"], ref=asset.get("ref", "main"))
+    data = _atomgit_contents(asset["repo"], asset["path"], ref=asset.get("ref", "main"))
     if progress:
         progress(len(data), len(data))
     part.write_bytes(data)
