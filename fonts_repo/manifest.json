@@ -2,6 +2,11 @@
  "version": "0.4.1",
  "fonts": [
   {
+   "name": "Jingfeng_ZSKSS",
+   "file": "JFZSKSealScript_V3.5.ttf",
+   "size": 2471004
+  },
+  {
    "name": "Liu Jian Mao Cao",
    "file": "LiuJianMaoCao-Regular.ttf",
    "size": 4951804
@@ -45,6 +50,11 @@
    "name": "Zhi Mang Xing",
    "file": "ZhiMangXing-Regular.ttf",
    "size": 4063532
+  },
+  {
+   "name": "Xiangcui Kesong",
+   "file": "香萃刻宋.ttf",
+   "size": 20140076
   }
  ]
 }
