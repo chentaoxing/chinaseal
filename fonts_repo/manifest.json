@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
- "version": "0.4.0",
-=======
  "version": "0.4.1",
->>>>>>> 5eb2142 (chore: 本地 manifest 版本对齐 0.4.1)
  "fonts": [
   {
    "name": "Liu Jian Mao Cao",
