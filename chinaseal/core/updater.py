@@ -125,16 +125,15 @@ def write_helper_bat(app_dir: str, zip_path: str, out_path: str) -> str:
       4. 启动新 ChinaSeal.exe
       5. 自删
     """
-    app_dir_q = app_dir.replace('"', '""')
+    app_dir = safe_path(app_dir, is_dir=True)
     zip_path = safe_path(zip_path)
-    zip_q = zip_path.replace('"', '""')
     out_path = safe_path(out_path)
 
     body = f'''@echo off
 setlocal
-set APP_DIR="{app_dir_q}"
-set ZIP=%~1
-set STAGED=%TEMP%\\ChinaSeal-Update-Staged
+set "APP_DIR={app_dir}"
+set "ZIP=%~1"
+set "STAGED=%TEMP%\\ChinaSeal-Update-Staged"
 if exist "%STAGED%" rd /S /Q "%STAGED%"
 mkdir "%STAGED%"
 echo [update] Extracting...
@@ -143,6 +142,11 @@ echo [update] Waiting for ChinaSeal.exe to exit...
 powershell -NoProfile -Command "$p = Get-Process -Name ChinaSeal -ErrorAction SilentlyContinue; while ($p) {{ Start-Sleep -Seconds 1; $p = Get-Process -Name ChinaSeal -ErrorAction SilentlyContinue }}; exit 0"
 echo [update] Replacing files...
 xcopy /Y /E /Q "%STAGED%\\*" "%APP_DIR%\\" >nul
+if not exist "%APP_DIR%\\ChinaSeal.exe" (
+  echo [update] ERROR: ChinaSeal.exe missing after copy - keeping old files.
+  rd /S /Q "%APP_DIR%\\.old" 2>nul
+  exit /b 1
+)
 echo [update] Cleaning staging...
 rd /S /Q "%STAGED%"
 del /F /Q "%ZIP%" 2>nul
