@@ -61,11 +61,13 @@ MM2PT = 72.0 / 25.4
 def pick_default_font(font_mgr: FontManager) -> str:
     """优先篆书/捆绑开源字体，其次楷宋，再退回能覆盖'印'字的免费字体。"""
     fams = font_mgr.families()
+    # 默认字体按"覆盖广"优先：小篆字库小、缺字多，只作为可选项而非默认
+    for f in ("霞鹜文楷", "LXGW WenKai", "思源宋体", "Noto Serif SC", "Source Han Serif SC",
+              "思源黑体", "Noto Sans CJK SC", "Source Han Sans SC"):
+        if f in fams:
+            return f
     for f in fams:
         if "篆" in f or "seal" in f.lower():
-            return f
-    for f in ("霞鹜文楷", "LXGW WenKai", "思源宋体", "Noto Serif SC", "Source Han Serif SC"):
-        if f in fams:
             return f
     for cand in ("楷体", "SimKai", "KaiTi", "Microsoft YaHei", "微软雅黑", "SimSun", "宋体"):
         if cand in fams and is_free_family(cand):
@@ -388,8 +390,11 @@ class MainWindow(QMainWindow):
         """检测更新：silent=True 时（启动自动检测）不弹"已是最新/失败"，仅发现新版才提示。"""
         from PySide6.QtWidgets import QMessageBox
         repo = self.settings.value("download/repo", D.REPO) or D.REPO
+        last_good = str(self.settings.value("download/last_good_src", "github"))
         try:
-            tag, assets = U.get_latest_release(repo)
+            tag, assets_all, src_used = D.list_release_assets_with_source(
+                repo, prefer=last_good, probe_timeout=8)
+            self.settings.setValue("download/last_good_src", src_used)
         except Exception as e:
             if not silent:
                 QMessageBox.warning(self, "检测更新失败",
@@ -639,6 +644,17 @@ class MainWindow(QMainWindow):
         self.missing = missing
         return outlines
 
+    def _fallback_font_entry(self):
+        """缺字预览回显用的兜底字体（覆盖最广的内置字体），与当前字体不同才返回。"""
+        for cand in ("霞鹜文楷", "LXGW WenKai", "思源宋体", "Noto Serif CJK SC",
+                     "Noto Sans CJK SC", "思源黑体", "Microsoft YaHei", "微软雅黑"):
+            if cand == self.params.font_family:
+                continue
+            e = self.font_mgr.find(cand)
+            if e is not None:
+                return e
+        return None
+
     def refresh(self):
         """按当前参数重建几何与全部画布内容。"""
         text = self.params.text
@@ -658,8 +674,23 @@ class MainWindow(QMainWindow):
             return
         keep_sel = self.canvas.selected_index()  # 重建后恢复选中
         outlines = self._get_outlines()
+        fallback_used = set()
         if self.missing:
             self.lbl_missing.setText("⚠ 字体缺字：" + " ".join(self.missing) + "（已阻止导出/打印）")
+            # 缺字预览回显：用兜底大字库渲染成琥珀色（导出仍阻止，不静默替换）
+            fb = self._fallback_font_entry()
+            if fb is not None:
+                from chinaseal.core.outlines import extract_outline as _eo
+                for ch in self.missing:
+                    if ch in outlines:
+                        continue
+                    try:
+                        ol = _eo(fb.path, ch, fb.font_number)
+                    except Exception:
+                        ol = None
+                    if ol is not None:
+                        outlines[ch] = ol
+                        fallback_used.add(ch)
         else:
             self.lbl_missing.setText("")
         self.charpaths = char_paths_mm(self.params, self.geo, outlines, mirror=True)
@@ -696,6 +727,8 @@ class MainWindow(QMainWindow):
                 item.char = cp["char"]
                 item.set_geometry(rel, (ox, oy))
                 item.set_appearance(fg)
+            if cp["char"] in fallback_used:
+                item.set_appearance(QColor("#FF8F00"))  # 缺字回显：琥珀色警示
             new_items.append(item)
         for leftover in by_idx.values():
             scene.removeItem(leftover)
