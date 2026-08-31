@@ -76,7 +76,8 @@ def user_fonts_dir() -> Path:
 
 def _atomgit_contents(repo: str, path: str, ref: str = "main", timeout: int = 15) -> bytes:
     """匿名读取仓库文件内容（base64 JSON 解码）。"""
-    url = f"{ATOMGIT_API}/repos/{repo}/contents/{path}"
+    url = (f"{ATOMGIT_API}/repos/{repo}/contents/"
+           f"{urllib.parse.quote(path)}")
     if ref:
         url += f"?ref={ref}"
     with _request(validate_url(url), timeout=timeout) as r:
@@ -88,7 +89,8 @@ def _atomgit_contents(repo: str, path: str, ref: str = "main", timeout: int = 15
 
 def _github_contents(repo: str, path: str, ref: str = "main") -> bytes:
     """GitHub 源：仓库内容（公开仓库匿名）。小文件用 base64 content，大文件用 download_url。"""
-    url = f"https://api.github.com/repos/{repo}/contents/{path}"
+    url = (f"https://api.github.com/repos/{repo}/contents/"
+           f"{urllib.parse.quote(path)}")
     if ref:
         url += f"?ref={ref}"
     with _request(validate_url(url)) as r:
