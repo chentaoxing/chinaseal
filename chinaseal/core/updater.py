@@ -24,6 +24,32 @@ ALLOWED_HOSTS = {
 ALLOWED_EXTS = (".bat", ".cmd", ".zip", ".tmp", ".log")
 
 
+_DNS_CACHE = {}
+_DNS_TTL = 300.0
+_DNS_TIMEOUT = 5.0
+
+
+def _resolve_host(host: str):
+    """带缓存的 DNS 解析；独立线程 + 硬超时，避免 getaddrinfo 无限挂起。"""
+    import time as _time
+    from concurrent.futures import ThreadPoolExecutor
+    now = _time.monotonic()
+    cached = _DNS_CACHE.get(host)
+    if cached and now - cached[0] < _DNS_TTL:
+        if cached[1] is None:
+            raise OSError(f"域名解析失败（缓存）：{host}")
+        return cached[1]
+    try:
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            infos = ex.submit(socket.getaddrinfo, host, 443,
+                              proto=socket.IPPROTO_TCP).result(timeout=_DNS_TIMEOUT)
+    except Exception as e:
+        _DNS_CACHE[host] = (now, None)
+        raise OSError(f"域名解析超时/失败：{host}（{e}）") from e
+    _DNS_CACHE[host] = (now, infos)
+    return infos
+
+
 def validate_url(url: str) -> str:
     import ipaddress, socket
     p = urllib.parse.urlparse(url)
@@ -32,7 +58,7 @@ def validate_url(url: str) -> str:
     host = p.hostname
     if not host or host not in ALLOWED_HOSTS:
         raise ValueError(f"主机不在白名单：{host}")
-    for info in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP):
+    for info in _resolve_host(host):
         ip = ipaddress.ip_address(info[4][0])
         if (ip.is_private or ip.is_loopback or ip.is_link_local
                 or ip.is_reserved or ip.is_multicast):

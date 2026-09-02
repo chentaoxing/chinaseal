@@ -446,16 +446,21 @@ class MainWindow(QMainWindow):
                     "当前版本 v" + chinaseal.__version__ + " 已是最新。")
             return
         asset = U.find_portable_asset(assets)
+        size_mb = f"{asset.get('size', 0)/1e6:.1f} MB）" if asset else "约 100 MB）"
         if asset is None:
-            QMessageBox.information(self, "发现新版本 v" + tag,
-                "新版本已发布，但便携包尚未上传。\n请前往：" + D.REPO_URL + "/releases")
-            return
+            # 清单源（AtomGit）资产里没有便携包：用确定性 GitHub Release 下载地址
+            asset = {"name": f"ChinaSeal-{tag}-portable.zip",
+                     "browser_download_url": (f"https://github.com/{repo}/releases/"
+                                              f"download/v{tag}/ChinaSeal-{tag}-portable.zip"),
+                     "size": 0}
+            if not silent:
+                self.status.showMessage("清单源无便携包资产，改用 GitHub Release 直链下载", 8000)
 
         self._update_tag = tag
         self._update_asset_url = asset.get("browser_download_url") or asset.get("url")
         box = QMessageBox(QMessageBox.Icon.Question, "发现新版本",
                           "当前版本 v" + chinaseal.__version__ + "，最新版本 v" + tag +
-                          "（" + f"{asset.get('size', 0)/1e6:.1f}" + " MB）。\n是否现在下载更新？",
+                          "（" + size_mb + "。\n是否现在下载更新？",
                           parent=self)
         from PySide6.QtWidgets import QCheckBox
         cb = QCheckBox("每次启动自动检测更新")
@@ -1168,6 +1173,8 @@ class AboutDialog(QDialog):
             "<br><br>开发者：chentaoxing <a href=\"mailto:chentaoxing@gmail.com\">chentaoxing@gmail.com</a>"
             "<br>版本与更新地址（点击打开）：<br>"
             "<a href='" + D.REPO_URL + "'>" + D.REPO_URL + "</a>"
+            "<br>国内镜像（AtomGit，点击打开）：<br>"
+            "<a href='" + D.ATOMGIT_REPO_URL + "'>" + D.ATOMGIT_REPO_URL + "</a>"
             "<br><br><span style='color:#888;font-size:12px'>"
             "内置字体：霞鹜文楷、思源宋体、LXGW Seal（小篆·预览版），"
             "均为开源或免费商用授权；字体列表默认隐藏可能有商用风险的系统字体。</span>")
