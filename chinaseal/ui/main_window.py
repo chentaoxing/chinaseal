@@ -387,22 +387,55 @@ class MainWindow(QMainWindow):
             self.refresh()
 
     def on_check_update(self, silent: bool = False):
-        """检测更新：silent=True 时（启动自动检测）不弹"已是最新/失败"，仅发现新版才提示。"""
-        from PySide6.QtWidgets import QMessageBox
-        repo = self.settings.value("download/repo", D.REPO) or D.REPO
-        last_good = str(self.settings.value("download/last_good_src", "github"))
-        try:
-            tag, assets_all, src_used = D.list_release_assets_with_source(
-                repo, prefer=last_good, probe_timeout=8)
-            self.settings.setValue("download/last_good_src", src_used)
-        except Exception as e:
-            if not silent:
-                QMessageBox.warning(self, "检测更新失败",
-                                    "无法连接更新服务器（GitHub/AtomGit）：\n" + str(e) +
-                                    "\n\n可手动访问：" + D.REPO_URL + "/releases")
-            else:
-                self.status.showMessage("启动检测更新：服务器不可达，已跳过", 5000)
+        """检测更新：silent=True 时（启动自动检测）不弹"已是最新/失败"，仅发现新版才提示。
+
+        网络检测在后台线程执行（UI 不冻结）；完成后经信号回调弹窗。
+        """
+        if getattr(self, "_update_chk_running", False):
             return
+        repo = self.settings.value("download/repo", D.REPO) or D.REPO
+        prefer = str(self.settings.value("download/last_good_src", "github"))
+        self._update_chk_running = True
+        self.act_check_update.setEnabled(False)
+        self.status.showMessage("正在检测更新…（GitHub 优先，AtomGit 兜底）", 15000)
+
+        class _W(QThread):
+            done = Signal(object)
+            failed = Signal(str)
+
+            def run(w_self):
+                try:
+                    tag, assets, src = D.list_release_assets_with_source(
+                        repo, prefer=prefer, probe_timeout=8)
+                    w_self.done.emit({"tag": tag, "assets": assets, "src": src})
+                except Exception as e:
+                    w_self.failed.emit(str(e))
+
+        self._update_chk = _W(self)
+        self._update_chk.done.connect(
+            lambda r: self._on_update_checked(r, silent))
+        self._update_chk.failed.connect(
+            lambda e: self._on_update_check_failed(e, silent))
+        self._update_chk.start()
+
+    def _on_update_check_failed(self, err: str, silent: bool):
+        self._update_chk_running = False
+        self.act_check_update.setEnabled(True)
+        self.status.clearMessage()
+        if not silent:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "检测更新失败",
+                                "无法连接更新服务器（GitHub/AtomGit）：\n" + str(e) +
+                                "\n\n可手动访问：" + D.REPO_URL + "/releases")
+        else:
+            self.status.showMessage("启动检测更新：服务器不可达，已跳过", 5000)
+
+    def _on_update_checked(self, result: dict, silent: bool):
+        from PySide6.QtWidgets import QMessageBox
+        self._update_chk_running = False
+        self.act_check_update.setEnabled(True)
+        self.status.clearMessage()
+        tag, assets = result.get("tag"), result.get("assets", [])
         if not tag:
             if not silent:
                 QMessageBox.warning(self, "检测更新失败", "发布服务器未返回版本信息。")
