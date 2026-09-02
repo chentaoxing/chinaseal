@@ -41,24 +41,38 @@ _DNS_TIMEOUT = 5.0       # 解析硬超时（挂起网络下不再无限等）
 
 
 def _resolve_host(host: str):
-    """带缓存的 DNS 解析；独立线程 + 硬超时，避免 getaddrinfo 无限挂起。"""
+    """带缓存的 DNS 解析；daemon 线程 + join 硬超时。
+
+    注意不能用 ThreadPoolExecutor 的 with/上下文：其 shutdown(wait=True)
+    会等待仍挂起的解析线程，导致"超时"形同虚设。
+    """
+    import threading
     import time as _time
-    from concurrent.futures import ThreadPoolExecutor
     now = _time.monotonic()
     cached = _DNS_CACHE.get(host)
     if cached and now - cached[0] < _DNS_TTL:
         if cached[1] is None:
             raise OSError(f"域名解析失败（缓存）：{host}")
         return cached[1]
-    try:
-        with ThreadPoolExecutor(max_workers=1) as ex:
-            infos = ex.submit(socket.getaddrinfo, host, 443,
-                              proto=socket.IPPROTO_TCP).result(timeout=_DNS_TIMEOUT)
-    except Exception as e:
+    out = {}
+
+    def _do():
+        try:
+            out["infos"] = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+        except Exception as e:
+            out["err"] = e
+
+    t = threading.Thread(target=_do, daemon=True)
+    t.start()
+    t.join(_DNS_TIMEOUT)
+    if t.is_alive():
         _DNS_CACHE[host] = (now, None)
-        raise OSError(f"域名解析超时/失败：{host}（{e}）") from e
-    _DNS_CACHE[host] = (now, infos)
-    return infos
+        raise OSError(f"域名解析超时（>{_DNS_TIMEOUT}s）：{host}")
+    if "err" in out:
+        _DNS_CACHE[host] = (now, None)
+        raise OSError(f"域名解析失败：{host}（{out['err']}）") from out["err"]
+    _DNS_CACHE[host] = (now, out["infos"])
+    return out["infos"]
 
 
 def validate_url(url: str) -> str:
@@ -75,7 +89,6 @@ def validate_url(url: str) -> str:
                 or ip.is_reserved or ip.is_multicast):
             raise ValueError(f"主机解析到受限地址：{host} -> {ip}")
     return url
-
 
 class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
