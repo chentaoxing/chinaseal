@@ -4,6 +4,7 @@
 """字体下载对话框：GitHub 为主、AtomGit 兜底，下载免费开源字体并注册。"""
 from __future__ import annotations
 
+import os
 import sys
 
 from PySide6.QtCore import Qt, QThread, Signal, QSettings
@@ -195,11 +196,7 @@ class FontDownloaderDialog(QDialog):
         self.btn_close.clicked.connect(self.reject)
 
         self._assets: list = []
-        import os as _os2
-        _base = _os2.environ.get("LOCALAPPDATA") or _os2.path.expanduser("~")
-        _log_dir = _os2.path.join(_base, "ChinaSeal")
-        _os2.makedirs(_log_dir, exist_ok=True)   # 关键：父目录必须先创建
-        self._log_path = _os2.path.join(_log_dir, "chinatext.log")
+        self._log_path = os.path.join(D.chinaseal_log_dir(), "chinatext.log")
         self._log("对话框打开")
         self._start_fetch()
 
