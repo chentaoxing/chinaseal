@@ -107,6 +107,14 @@ def _request(url: str, timeout: int = 30):
     return _OPENER.open(req, timeout=timeout)
 
 
+def chinaseal_log_dir() -> str:
+    """诊断日志目录：%LOCALAPPDATA%\ChinaSeal（软件各模块共用）。"""
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "ChinaSeal")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 def user_fonts_dir() -> Path:
     d = Path.home() / "ChinaSeal" / "fonts"
     d.mkdir(parents=True, exist_ok=True)
@@ -119,8 +127,7 @@ def _atomgit_contents(repo: str, path: str, ref: str = "main", timeout: int = 15
            f"{urllib.parse.quote(path)}")
     if ref:
         url += f"?ref={ref}"
-    with _request(validate_url(url), timeout=timeout) as r:
-        data = json.load(r)
+    data = json.loads(_request(validate_url(url), timeout=timeout))
     if data.get("encoding") == "base64":
         return base64.b64decode(data["content"])
     return str(data.get("content", "")).encode("utf-8")
@@ -132,13 +139,11 @@ def _github_contents(repo: str, path: str, ref: str = "main") -> bytes:
            f"{urllib.parse.quote(path)}")
     if ref:
         url += f"?ref={ref}"
-    with _request(validate_url(url)) as r:
-        data = json.load(r)
+    data = json.loads(_request(validate_url(url)))
     if isinstance(data, dict) and data.get("encoding") == "base64" and "content" in data:
         return base64.b64decode(data["content"])
     if isinstance(data, dict) and data.get("download_url"):
-        with _request(validate_url(data["download_url"]), timeout=120) as r2:
-            return r2.read()
+        return _request(validate_url(data["download_url"]), timeout=120)
     raise RuntimeError(f"GitHub contents 不可用: {path}")
 
 
@@ -174,8 +179,7 @@ def _fetch_atomgit_manifest(repo: str, timeout: int = 15) -> tuple:
 def _fetch_release(src: str, repo: str) -> tuple:
     # 源码仅支持 GitHub Release（AtomGit 走 manifest 路径，不经此函数）
     url = f"https://api.github.com/repos/{repo}/releases/latest"
-    with _request(validate_url(url)) as r:
-        data = json.load(r)
+    data = json.loads(_request(validate_url(url)))
     tag = str(data.get("tag_name") or data.get("name") or "")
     assets = []
     for a in data.get("assets", []):

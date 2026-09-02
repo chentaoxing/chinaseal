@@ -13,7 +13,7 @@ import sys
 
 from PySide6.QtCore import QThread, QTimer, Signal
 from PySide6.QtCore import QUrl
-from PySide6.QtGui import (QAction, QKeySequence, QPainter, QColor, QPen, QFont,
+from PySide6.QtGui import (QAction, QDesktopServices, QKeySequence, QPainter, QColor, QPen, QFont,
                            QUndoStack, QIcon, QPixmap)
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QGroupBox,
@@ -388,9 +388,9 @@ class MainWindow(QMainWindow):
             self.refresh()
 
     def _update_log(self, msg):
-        """更新流程诊断日志（与字体下载共用 chinatext.log，位于用户字体库父目录）。"""
+        """更新流程诊断日志（与字体下载/打开日志共用 chinatext.log）。"""
         import datetime as _dt
-        log_dir = str(D.user_fonts_dir().parent)
+        log_dir = D.chinaseal_log_dir()
         if ".." in Path(log_dir).parts:
             return
         os.makedirs(log_dir, exist_ok=True)
@@ -1209,16 +1209,12 @@ class AboutDialog(QDialog):
             "内置字体：霞鹜文楷、思源宋体、LXGW Seal（小篆·预览版），"
             "均为开源或免费商用授权；字体列表默认隐藏可能有商用风险的系统字体。</span>")
         info.setTextFormat(Qt.TextFormat.RichText)
-        info.setOpenExternalLinks(True)   # 点击链接直接打开浏览器
+        info.setOpenExternalLinks(False)  # 关闭自动打开，改走 linkActivated 显式调起
         info.setWordWrap(True)
         lay.addWidget(info)
 
-        btn_gh = QPushButton("打开 GitHub 更新页")
-        btn_gh.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(D.REPO_URL)))
-        lay.addWidget(btn_gh)
-        btn_ag = QPushButton("打开 AtomGit 镜像页")
-        btn_ag.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(D.ATOMGIT_REPO_URL)))
-        lay.addWidget(btn_ag)
+        # 链接点击 → 显式调起系统浏览器（QLabel setOpenExternalLinks 在部分环境不生效）
+        info.linkActivated.connect(lambda u: QDesktopServices.openUrl(QUrl(u)))
 
         btns = QHBoxLayout()
         btn_update = QPushButton("检测更新")

@@ -86,18 +86,35 @@ def safe_path(raw: str, is_dir: bool = False) -> str:
 
 
 def _request(url, timeout=30):
+    """全 bounded HTTP：urlopen（含内部 getaddrinfo）在 daemon 线程限时完成。"""
+    import threading as _threading
     validate_url(url)
     h = {"User-Agent": f"ChinaSeal/{chinaseal.__version__}",
          "Accept": "application/vnd.github+json"}
     req = urllib.request.Request(url, headers=h)
-    return urllib.request.urlopen(req, timeout=timeout)
+    out = {}
+
+    def _do():
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                out["body"] = resp.read()
+        except Exception as e:
+            out["err"] = e
+
+    t = _threading.Thread(target=_do, daemon=True)
+    t.start()
+    t.join(timeout + 5)
+    if t.is_alive():
+        raise OSError(f"请求超时（>{timeout + 5}s，含域名解析）：{url}")
+    if "err" in out:
+        raise out["err"]
+    return out["body"]
 
 
 def get_latest_release(repo: str = REPO):
     """返回 (version_tag, [asset])，找不到版本返回 (None, [])。"""
     try:
-        with _request(f"{GITHUB_API}/{repo}/releases/latest") as r:
-            data = json.load(r)
+        data = json.loads(_request(f"{GITHUB_API}/{repo}/releases/latest"))
     except Exception:
         return None, []
     tag = str(data.get("tag_name") or "").lstrip("vV")
