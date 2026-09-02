@@ -12,6 +12,7 @@ import os
 import sys
 
 from PySide6.QtCore import QThread, QTimer, Signal
+from PySide6.QtCore import QUrl
 from PySide6.QtGui import (QAction, QKeySequence, QPainter, QColor, QPen, QFont,
                            QUndoStack, QIcon, QPixmap)
 from PySide6.QtWidgets import (
@@ -386,18 +387,32 @@ class MainWindow(QMainWindow):
             self.params.font_family = dlg.added_families[0]
             self.refresh()
 
+    def _update_log(self, msg):
+        """更新流程诊断日志（与字体下载共用 chinatext.log，位于用户字体库父目录）。"""
+        import datetime as _dt
+        log_dir = str(D.user_fonts_dir().parent)
+        if ".." in Path(log_dir).parts:
+            return
+        os.makedirs(log_dir, exist_ok=True)
+        with open(os.path.join(log_dir, "chinatext.log"), "a", encoding="utf-8") as f:
+            f.write(f"[{_dt.datetime.now():%H:%M:%S}] [update] {msg}\n")
+
     def on_check_update(self, silent: bool = False):
         """检测更新：silent=True 时（启动自动检测）不弹"已是最新/失败"，仅发现新版才提示。
 
         网络检测在后台线程执行（UI 不冻结）；完成后经信号回调弹窗。
         """
+        from PySide6.QtWidgets import QMessageBox
         if getattr(self, "_update_chk_running", False):
+            if not silent:
+                QMessageBox.information(self, "检测中", "正在检测更新，请稍候…")
             return
         repo = self.settings.value("download/repo", D.REPO) or D.REPO
         prefer = str(self.settings.value("download/last_good_src", "github"))
         self._update_chk_running = True
         self.act_check_update.setEnabled(False)
         self.status.showMessage("正在检测更新…（GitHub 优先，AtomGit 兜底）", 15000)
+        self._update_log(f"检测更新开始 silent={silent} prefer={prefer}")
 
         class _W(QThread):
             done = Signal(object)
@@ -417,8 +432,21 @@ class MainWindow(QMainWindow):
         self._update_chk.failed.connect(
             lambda e: self._on_update_check_failed(e, silent))
         self._update_chk.start()
+        # 看门狗：60 秒未完成视为卡死，复位状态并提示（诊断线索写入日志）
+        def _watchdog():
+            if getattr(self, "_update_chk_running", False):
+                self._update_log("看门狗：检测更新 60s 未完成，疑似卡死")
+                self._update_chk_running = False
+                self.act_check_update.setEnabled(True)
+                self.status.clearMessage()
+                if not silent:
+                    QMessageBox.warning(self, "检测超时",
+                                        "检测更新超过 60 秒未完成（网络异常）。\n"
+                                        "请稍后重试，或打开日志查看详情。")
+        QTimer.singleShot(60000, _watchdog)
 
     def _on_update_check_failed(self, err: str, silent: bool):
+        self._update_log(f"检测失败：{err[:200]}")
         self._update_chk_running = False
         self.act_check_update.setEnabled(True)
         self.status.clearMessage()
@@ -432,6 +460,8 @@ class MainWindow(QMainWindow):
 
     def _on_update_checked(self, result: dict, silent: bool):
         from PySide6.QtWidgets import QMessageBox
+        self._update_log(f"检测完成 src={result.get('src')} tag={result.get('tag')} "
+                         f"资产={len(result.get('assets') or [])}")
         self._update_chk_running = False
         self.act_check_update.setEnabled(True)
         self.status.clearMessage()
@@ -1182,6 +1212,13 @@ class AboutDialog(QDialog):
         info.setOpenExternalLinks(True)   # 点击链接直接打开浏览器
         info.setWordWrap(True)
         lay.addWidget(info)
+
+        btn_gh = QPushButton("打开 GitHub 更新页")
+        btn_gh.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(D.REPO_URL)))
+        lay.addWidget(btn_gh)
+        btn_ag = QPushButton("打开 AtomGit 镜像页")
+        btn_ag.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(D.ATOMGIT_REPO_URL)))
+        lay.addWidget(btn_ag)
 
         btns = QHBoxLayout()
         btn_update = QPushButton("检测更新")
