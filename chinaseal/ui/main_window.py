@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QSettings, QPointF
 import os
@@ -453,7 +454,7 @@ class MainWindow(QMainWindow):
         if not silent:
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "检测更新失败",
-                                "无法连接更新服务器（GitHub/AtomGit）：\n" + str(e) +
+                                "无法连接更新服务器（GitHub/AtomGit）：\n" + str(err) +
                                 "\n\n可手动访问：" + D.REPO_URL + "/releases")
         else:
             self.status.showMessage("启动检测更新：服务器不可达，已跳过", 5000)
@@ -1210,6 +1211,7 @@ class AboutDialog(QDialog):
             "均为开源或免费商用授权；字体列表默认隐藏可能有商用风险的系统字体。</span>")
         info.setTextFormat(Qt.TextFormat.RichText)
         info.setOpenExternalLinks(False)  # 关闭自动打开，改走 linkActivated 显式调起
+        info.setTextInteractionFlags(Qt.TextBrowserInteraction)  # 使链接可点击并触发 linkActivated
         info.setWordWrap(True)
         lay.addWidget(info)
 

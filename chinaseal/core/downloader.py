@@ -121,13 +121,13 @@ def user_fonts_dir() -> Path:
     return d
 
 
-def _atomgit_contents(repo: str, path: str, ref: str = "main", timeout: int = 15) -> bytes:
+def _atomgit_contents(repo: str, path: str, ref: str = "main") -> bytes:
     """匿名读取仓库文件内容（base64 JSON 解码）。"""
-    url = (f"{ATOMGIT_API}/repos/{repo}/contents/"
-           f"{urllib.parse.quote(path)}")
+    url = f"{ATOMGIT_API}/repos/{repo}/contents/{urllib.parse.quote(path)}"
     if ref:
         url += f"?ref={ref}"
-    data = json.loads(_request(validate_url(url), timeout=timeout))
+    with _request(validate_url(url)) as r:
+        data = json.loads(r.read())
     if data.get("encoding") == "base64":
         return base64.b64decode(data["content"])
     return str(data.get("content", "")).encode("utf-8")
@@ -135,21 +135,22 @@ def _atomgit_contents(repo: str, path: str, ref: str = "main", timeout: int = 15
 
 def _github_contents(repo: str, path: str, ref: str = "main") -> bytes:
     """GitHub 源：仓库内容（公开仓库匿名）。小文件用 base64 content，大文件用 download_url。"""
-    url = (f"https://api.github.com/repos/{repo}/contents/"
-           f"{urllib.parse.quote(path)}")
+    url = f"https://api.github.com/repos/{repo}/contents/{urllib.parse.quote(path)}"
     if ref:
         url += f"?ref={ref}"
-    data = json.loads(_request(validate_url(url)))
+    with _request(validate_url(url)) as r:
+        data = json.loads(r.read())
     if isinstance(data, dict) and data.get("encoding") == "base64" and "content" in data:
         return base64.b64decode(data["content"])
     if isinstance(data, dict) and data.get("download_url"):
-        return _request(validate_url(data["download_url"]), timeout=120)
+        with _request(validate_url(data["download_url"]), timeout=120) as r:
+            return r.read()
     raise RuntimeError(f"GitHub contents 不可用: {path}")
 
 
 def _fetch_github_manifest(repo: str, timeout: int = 8) -> tuple:
     """GitHub 源：仓库根 manifest.json 定义版本与字体清单。"""
-    manifest = json.loads(_github_contents(repo, "manifest.json", timeout=timeout))
+    manifest = json.loads(_github_contents(repo, "manifest.json"))
     version = str(manifest.get("version", "0"))
     assets = []
     for f in manifest.get("fonts", []):
@@ -164,7 +165,7 @@ def _fetch_github_manifest(repo: str, timeout: int = 8) -> tuple:
 
 def _fetch_atomgit_manifest(repo: str, timeout: int = 15) -> tuple:
     """AtomGit 源：fonts_repo/manifest.json 定义版本与字体清单。"""
-    manifest = json.loads(_atomgit_contents(repo, "fonts_repo/manifest.json", timeout=timeout))
+    manifest = json.loads(_atomgit_contents(repo, "fonts_repo/manifest.json"))
     version = str(manifest.get("version", "0"))
     assets = []
     for f in manifest.get("fonts", []):
