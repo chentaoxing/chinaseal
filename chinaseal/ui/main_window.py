@@ -1210,13 +1210,13 @@ class AboutDialog(QDialog):
             "内置字体：霞鹜文楷、思源宋体、LXGW Seal（小篆·预览版），"
             "均为开源或免费商用授权；字体列表默认隐藏可能有商用风险的系统字体。</span>")
         info.setTextFormat(Qt.TextFormat.RichText)
-        info.setOpenExternalLinks(False)  # 关闭自动打开，改走 linkActivated 显式调起
-        info.setTextInteractionFlags(Qt.TextBrowserInteraction)  # 使链接可点击并触发 linkActivated
+        info.setTextInteractionFlags(Qt.TextBrowserInteraction)  # 使链接可点击
         info.setWordWrap(True)
         lay.addWidget(info)
 
-        # 链接点击 → 显式调起系统浏览器（QLabel setOpenExternalLinks 在部分环境不生效）
-        info.linkActivated.connect(lambda u: QDesktopServices.openUrl(QUrl(u)))
+        # 链接点击 → webbrowser.open（比 QDesktopServices 更可靠）
+        import webbrowser
+        info.linkActivated.connect(lambda u: webbrowser.open(u))
 
         btns = QHBoxLayout()
         btn_update = QPushButton("检测更新")
