@@ -514,6 +514,7 @@ class MainWindow(QMainWindow):
                 self.status.showMessage("清单源无便携包资产，改用 GitHub Release 直链下载", 8000)
 
         self._update_tag = tag
+        self._update_repo = repo
         self._update_asset_url = asset.get("browser_download_url") or asset.get("url")
         box = QMessageBox(QMessageBox.Icon.Question, "发现新版本",
                           "当前版本 v" + chinaseal.__version__ + "，最新版本 v" + tag +
@@ -532,13 +533,23 @@ class MainWindow(QMainWindow):
         self._download_update(asset, tag)
 
     def _download_update(self, asset: dict, tag: str):
-        """后台下载更新包到暂存目录，完成后询问安装。"""
+        """后台下载更新包到暂存目录：GitHub→AtomGit 自动换源 + 并行分块。"""
         from PySide6.QtWidgets import QProgressDialog
-        url = asset.get("browser_download_url") or asset.get("url")
-        dest = os.path.join(U.staging_dir(), f"ChinaSeal-{tag}-portable.zip")
+        ver = str(tag).lstrip("vV")
+        repo = str(getattr(self, "_update_repo", "") or D.REPO)
+        seen, cands = set(), []
+        for u in (f"https://atomgit.com/{repo}/releases/"
+                  f"download/v{ver}/ChinaSeal-{ver}-portable.zip",
+                  asset.get("browser_download_url") or asset.get("url"),
+                  f"https://github.com/{repo}/releases/"
+                  f"download/v{ver}/ChinaSeal-{ver}-portable.zip"):
+            if u and u not in seen:
+                seen.add(u)
+                cands.append(u)
+        dest = os.path.join(U.staging_dir(), f"ChinaSeal-{ver}-portable.zip")
         self._update_dest = dest
-        self._update_tag = tag
-        prog = QProgressDialog(f"正在下载 v{tag} 更新包…", None, 0, 100, self)
+        self._update_tag = ver
+        prog = QProgressDialog(f"正在下载 v{ver} 更新包…", None, 0, 100, self)
         prog.setWindowTitle("软件更新")
         prog.setWindowModality(Qt.WindowModality.WindowModal)
         prog.setMinimumDuration(0)
@@ -551,30 +562,45 @@ class MainWindow(QMainWindow):
 
             def __init__(w_self):
                 super().__init__(prog)
-                w_self._url, w_self._dest = url, dest
+                w_self._cands, w_self._dest = cands, dest
 
             def run(w_self):
                 try:
-                    U.download_to_file(w_self._url, w_self._dest,
-                                       progress=lambda d, t: w_self.progress.emit(d, t))
+                    U.download_update(w_self._cands, w_self._dest,
+                                      progress=lambda d, t: w_self.progress.emit(d, t))
                     w_self.done.emit(w_self._dest)
                 except Exception as e:
                     w_self.failed.emit(str(e))
 
         self._update_dl = _W()
 
+        _sp = {"t0": None, "d0": 0}
+
         def on_prog(d, t):
             prog.setValue(int(d * 100 / max(1, t)))
+            import time as _t
+            now = _t.monotonic()
+            if _sp["t0"] is None:
+                _sp["t0"], _sp["d0"] = now, d
+                return
+            dt = now - _sp["t0"]
+            if dt > 1.0:
+                spd = max((d - _sp["d0"]) / dt / 1e6, 0.0)
+                prog.setLabelText(
+                    f"正在下载 v{ver} 更新包… {spd:.1f} MB/s"
+                    f"（{d / 1e6:.0f}/{t / 1e6:.0f} MB，网速过低自动换源）")
+                _sp["t0"], _sp["d0"] = now, d
 
         def on_done(path):
             prog.close()
-            self._log(f"更新包下载完成：{path}")
-            self._prompt_install(path, tag)
+            self._update_log(f"更新包下载完成：{path}")
+            self._prompt_install(path, ver)
 
         def on_fail(err):
             prog.close()
-            self._log(f"更新包下载失败：{err}")
-            QMessageBox.warning(self, "下载失败", "更新包下载失败：\n" + err)
+            self._update_log(f"更新包下载失败：{err}")
+            QMessageBox.warning(self, "下载失败",
+                                "更新包下载失败（GitHub/AtomGit 均已尝试）：\n" + str(err))
 
         self._update_dl.progress.connect(on_prog)
         self._update_dl.done.connect(on_done)
@@ -609,7 +635,7 @@ class MainWindow(QMainWindow):
             import subprocess as _sp
             _sp.Popen(["cmd", "/c", helper, zip_path], cwd=app_dir,
                       creationflags=0x00000008 | 0x00000200)  # DETACHED_PROCESS | NEW_PG
-            self._log(f"启动更新 helper：{helper}")
+            self._update_log(f"启动更新 helper：{helper}")
             QApplication.quit()
         except Exception as e:
             QMessageBox.critical(self, "安装失败",

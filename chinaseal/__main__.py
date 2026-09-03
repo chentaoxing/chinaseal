@@ -14,6 +14,17 @@ def main():
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
+    from chinaseal.core import crashlog
+    crashlog.install()
+    import threading
+
+    def _thread_hook(args):
+        crashlog._write_log("子线程异常：\n" + "".join(
+            traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback)))
+
+    import traceback
+    threading.excepthook = _thread_hook
+
     app = QApplication(sys.argv)
     app.setOrganizationName("ChinaSeal")
     app.setApplicationName("ChinaSeal")

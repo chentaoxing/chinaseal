@@ -19,7 +19,9 @@ ASSET_NAME_HINT = "portable.zip"
 
 ALLOWED_HOSTS = {
     "api.github.com", "github.com", "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
     "raw.githubusercontent.com", "uploads.github.com", "codeload.github.com",
+    "atomgit.com", "file-cdn.gitcode.com",
 }
 
 ALLOWED_EXTS = (".bat", ".cmd", ".zip", ".tmp", ".log")
@@ -157,10 +159,263 @@ def download_to_file(url: str, dest_path: str, progress=None) -> None:
     _write_bytes(dest_path, bytes(buf))
 
 
+def _ua() -> dict:
+    return {"User-Agent": f"ChinaSeal/{chinaseal.__version__}"}
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """每次重定向都重新过协议/白名单/解析 IP 校验，防跳转绕过与 DNS rebinding。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        validate_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_SafeRedirectHandler)
+
+
+def _validated_open(url: str, headers: dict = None, timeout: int = 60):
+    """一切对外 HTTP 的唯一出口：先校验再请求，重定向逐跳再校验。"""
+    validate_url(url)
+    req = urllib.request.Request(url, headers={**_ua(), **(headers or {})})
+    return _OPENER.open(req, timeout=timeout)
+
+
+def _open_download(path: str, mode: str):
+    """下载文件唯一落盘通道：函数内 safe_path 规范化禁 ..，且限定暂存目录内。"""
+    p = Path(safe_path(path))
+    root = Path(safe_path(tempfile.gettempdir(), is_dir=True))
+    try:
+        p.relative_to(root)
+    except ValueError:
+        raise ValueError(f"仅允许写入系统临时目录树：{p}")
+    return open(str(p), mode)
+
+
+def _sidecar(dest_path: str, tag: str) -> str:
+    """dest 同目录旁路临时文件（如 .part0）：base 先过 safe_path，再验同目录。"""
+    base = Path(safe_path(dest_path))
+    p = base.parent / (base.name + tag)
+    if ".." in p.parts or p.parent != base.parent:
+        raise ValueError(f"旁路文件越出目标目录：{p}")
+    return str(p.resolve())
+
+
+def _cleanup_sidecars(dest_path: str) -> None:
+    """清掉 dest 的全部旁路临时文件（各轮 .part*/.single*），被占用则跳过。"""
+    base = Path(safe_path(dest_path))
+    for pat in (base.name + ".part*", base.name + ".single*"):
+        for p in base.parent.glob(pat):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
+
+def _probe_total(url: str) -> tuple:
+    """Range 0-0 探测文件大小与断点支持。返回 (total 或 0, 是否支持 Range)。"""
+    with _validated_open(url, {"Range": "bytes=0-0"}, timeout=30) as r:
+        cr = r.headers.get("Content-Range") or ""
+        r.read(1)
+        if r.status == 206 and "/" in cr:
+            try:
+                return int(cr.rsplit("/", 1)[1]), True
+            except ValueError:
+                pass
+        cl = r.headers.get("Content-Length") or "0"
+        try:
+            return int(cl), False
+        except ValueError:
+            return 0, False
+
+
+class _SpeedWatch:
+    """下载看门狗（三态）：
+    - "stall"：window 秒窗口内零进度（真停滞，始终判定失败）；
+    - "slow" ：窗口内增量不足 min_bytes（默认 15s < 15MB 即 <1MB/s）；
+    - None   ：正常。
+    最后一个候选源只对 stall 判死，slow 允许磨完（聊胜于无）。"""
+
+    def __init__(self, window: float = 15.0, min_bytes: int = 15 * 1024 * 1024):
+        self.window, self.min_bytes = window, min_bytes
+        self.hist = []
+
+    def tick(self, done: int):
+        import time as _t
+        now = _t.monotonic()
+        self.hist.append((now, done))
+        # 以次新点为参照弹出过期基准：保证基准点年龄可超过 window，
+        # 否则 pop 条件（<=window）与判满条件（>=window）冲突，永远判不满
+        while len(self.hist) > 2 and now - self.hist[1][0] > self.window:
+            self.hist.pop(0)
+        base = self.hist[0]
+        if now - base[0] < self.window:
+            return None  # 窗口未满，尚不判定
+        delta = done - base[1]
+        if delta <= 0:
+            return "stall"
+        if delta < self.min_bytes:
+            return "slow"
+        return None
+
+
+def _download_single(url, dest_path, progress, stop, stall_seconds, last=False,
+                     rnd=0):
+    """整文件流式下载（无 Range 支持时的通道），带低速切源检测。
+
+    写入独立旁路文件再原子改名：换源后上一轮的僵死线程可能仍握着
+    旧 dest 句柄（阻塞中的 socket read 最长 60s 才退出），不能直接写 dest。
+    """
+    import threading as _th
+    counter = {"done": 0}
+    box = {}
+    watch = _SpeedWatch(stall_seconds)
+    tmp = _sidecar(dest_path, f".single.r{rnd}.tmp")
+
+    def _do():
+        try:
+            with _validated_open(url, timeout=60) as r, \
+                    _open_download(tmp, "wb") as f:
+                total = int(r.headers.get("Content-Length") or 0)
+                while not stop["flag"]:
+                    chunk = r.read(1 << 16)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    counter["done"] += len(chunk)
+                    if progress and total:
+                        progress(counter["done"], total)
+            box["ok"] = True
+        except Exception as e:
+            box["err"] = e
+
+    t = _th.Thread(target=_do, daemon=True)
+    t.start()
+    while t.is_alive():
+        t.join(2)
+        verdict = watch.tick(counter["done"])
+        if verdict == "stall" or (verdict == "slow" and not last):
+            stop["flag"] = True
+            raise OSError("下载停滞（15s 零进度）" if verdict == "stall"
+                          else "下载过慢（15s 窗口不足 15MB）")
+    if box.get("err"):
+        raise box["err"]
+    os.replace(tmp, dest_path)
+
+
+def _download_parallel(url, dest_path, total, progress, stop, stall_seconds,
+                       workers, last=False, rnd=0):
+    """Range 分块并行下载：workers 路同时拉，写各自 .part 后顺序合并。
+
+    旁路文件带轮次号：换源后上一轮僵死线程（最长 60s 才从阻塞 read 退出）
+    仍握着旧文件句柄，新轮次用不同文件名避免 WinError 32。
+    """
+    import threading as _th
+    import time as _t
+    segs = [(i * total // workers, (i + 1) * total // workers - 1)
+            for i in range(workers)]
+    counter = {"done": 0}
+    lock = _th.Lock()
+    errs = []
+
+    def worker(i, lo, hi):
+        part = _sidecar(dest_path, f".part{i}.r{rnd}.tmp")
+        try:
+            with _validated_open(url, {"Range": f"bytes={lo}-{hi}"}, timeout=60) as r, \
+                    _open_download(part, "wb") as f:
+                if r.status != 206:
+                    raise OSError(f"服务器未按 Range 响应（HTTP {r.status}）")
+                while not stop["flag"]:
+                    chunk = r.read(1 << 16)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    with lock:
+                        counter["done"] += len(chunk)
+                        done = counter["done"]
+                    if progress:
+                        progress(done, total)
+            got = os.path.getsize(part)
+            if got != hi - lo + 1:
+                raise OSError(f"分块 {i} 不完整：{got}/{hi - lo + 1}")
+        except Exception as e:
+            with lock:
+                errs.append(f"分块 {i}: {e}")
+            stop["flag"] = True
+
+    ts = [_th.Thread(target=worker, args=(i, lo, hi), daemon=True)
+          for i, (lo, hi) in enumerate(segs)]
+    for t in ts:
+        t.start()
+    watch = _SpeedWatch(stall_seconds)
+    while any(t.is_alive() for t in ts):
+        _t.sleep(2)
+        with lock:
+            now = counter["done"]
+        verdict = watch.tick(now)
+        if verdict == "stall" or (verdict == "slow" and not last):
+            stop["flag"] = True
+            raise OSError("下载停滞（15s 零进度）" if verdict == "stall"
+                          else "下载过慢（15s 窗口不足 15MB）")
+    for t in ts:
+        t.join(10)
+    with lock:
+        if errs:
+            raise OSError("; ".join(errs[:3]))
+    with _open_download(dest_path, "wb") as out:
+        for i in range(workers):
+            part = _sidecar(dest_path, f".part{i}.r{rnd}.tmp")
+            with _open_download(part, "rb") as f:
+                while True:
+                    blk = f.read(1 << 20)
+                    if not blk:
+                        break
+                    out.write(blk)
+            os.remove(part)
+
+
+def download_update(candidates, dest_path: str, progress=None,
+                    stall_seconds: int = 15, workers: int = 4) -> None:
+    """更新包下载：候选 URL 依序换源 + 多路并行分块。
+
+    candidates：https 直链列表（如 AtomGit → GitHub）。某源异常，或
+    stall_seconds 秒窗口内进度不足 5MB（龟速/停滞），即换下一个源；
+    全部失败抛 RuntimeError（含各源原因）。
+    URL 与每次重定向都在 _validated_open 过协议/白名单/IP 校验；
+    所有落盘走 _open_download（safe_path + 临时目录 containment）。
+    """
+    dest_path = safe_path(dest_path)
+    errors = []
+    for idx, url in enumerate(candidates):
+        stop = {"flag": False}
+        last = idx == len(candidates) - 1
+        host = urllib.parse.urlparse(url).netloc
+        try:
+            total, ranged = _probe_total(url)
+            if total and ranged and workers > 1:
+                _download_parallel(url, dest_path, total, progress,
+                                   stop, stall_seconds, workers,
+                                   last=last, rnd=idx)
+            else:
+                _download_single(url, dest_path, progress, stop,
+                                 stall_seconds, last=last, rnd=idx)
+            if not os.path.exists(dest_path) or os.path.getsize(dest_path) < 1024:
+                raise OSError("下载文件缺失或过小")
+            return
+        except Exception as e:
+            stop["flag"] = True
+            errors.append(f"{host}: {e}")
+            _cleanup_sidecars(dest_path)  # 半成品旁路文件全清，换源重头下
+            try:
+                os.remove(dest_path)
+            except OSError:
+                pass
+    raise RuntimeError("所有更新源均失败：\n" + "\n".join(errors))
+
+
 def app_dir() -> str:
     """返回 ChinaSeal.exe 所在目录（PyInstaller onedir 形态）。"""
     return safe_path(os.path.dirname(os.path.abspath(sys.executable)), is_dir=True)
-
 
 def staging_dir() -> str:
     d = Path(tempfile.gettempdir()) / "ChinaSeal-Update"
