@@ -415,6 +415,14 @@ class MainWindow(QMainWindow):
         self.status.showMessage("正在检测更新…（GitHub 优先，AtomGit 兜底）", 15000)
         self._update_log(f"检测更新开始 silent={silent} prefer={prefer}")
 
+        # 检测中弹窗（用户可见，不再依赖状态栏小字）
+        from PySide6.QtWidgets import QProgressDialog
+        self._update_prog = QProgressDialog("正在检测更新…", None, 0, 0, self)
+        self._update_prog.setWindowTitle("检测更新")
+        self._update_prog.setWindowModality(Qt.WindowModality.WindowModal)
+        self._update_prog.setMinimumDuration(0)
+        self._update_prog.show()
+
         class _W(QThread):
             done = Signal(object)
             failed = Signal(str)
@@ -433,12 +441,14 @@ class MainWindow(QMainWindow):
         self._update_chk.failed.connect(
             lambda e: self._on_update_check_failed(e, silent))
         self._update_chk.start()
-        # 看门狗：60 秒未完成视为卡死，复位状态并提示（诊断线索写入日志）
+        # 看门狗：60 秒未完成视为卡死，复位状态并提示
         def _watchdog():
             if getattr(self, "_update_chk_running", False):
                 self._update_log("看门狗：检测更新 60s 未完成，疑似卡死")
                 self._update_chk_running = False
                 self.act_check_update.setEnabled(True)
+                if hasattr(self, "_update_prog"):
+                    self._update_prog.close()
                 self.status.clearMessage()
                 if not silent:
                     QMessageBox.warning(self, "检测超时",
@@ -447,6 +457,8 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(60000, _watchdog)
 
     def _on_update_check_failed(self, err: str, silent: bool):
+        if hasattr(self, "_update_prog"):
+            self._update_prog.close()
         self._update_log(f"检测失败：{err[:200]}")
         self._update_chk_running = False
         self.act_check_update.setEnabled(True)
@@ -460,6 +472,8 @@ class MainWindow(QMainWindow):
             self.status.showMessage("启动检测更新：服务器不可达，已跳过", 5000)
 
     def _on_update_checked(self, result: dict, silent: bool):
+        if hasattr(self, "_update_prog"):
+            self._update_prog.close()
         from PySide6.QtWidgets import QMessageBox
         self._update_log(f"检测完成 src={result.get('src')} tag={result.get('tag')} "
                          f"资产={len(result.get('assets') or [])}")
