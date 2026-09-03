@@ -26,7 +26,8 @@ UA = "ChinaSeal-mirror"
 ALLOWED_HOSTS = {
     "api.github.com", "github.com", "objects.githubusercontent.com",
     "release-assets.githubusercontent.com", "uploads.github.com",
-    "api.atomgit.com", "atomgit.com",
+    "api.atomgit.com", "atomgit.com", "file-cdn.gitcode.com",
+    "file.gitcode.com",
 }
 # AtomGit 附件走华为云 OBS 预签名 PUT，域名动态下发，按平台后缀放行
 OBS_SUFFIX = ".myhuaweicloud.com"
