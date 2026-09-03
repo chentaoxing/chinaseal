@@ -429,9 +429,18 @@ class MainWindow(QMainWindow):
 
             def run(w_self):
                 try:
+                    # 首选 GitHub Releases（安装包的唯一存放处）；
+                    # api.github.com 不可达时退回字体清单源取版本号
+                    tag, rel_assets = U.get_latest_release(repo)
+                    portable = U.find_portable_asset(rel_assets)
+                    if portable is not None:
+                        w_self.done.emit({"tag": tag, "assets": [portable],
+                                          "src": "release", "repo": repo})
+                        return
                     tag, assets, src = D.list_release_assets_with_source(
                         repo, prefer=prefer, probe_timeout=8)
-                    w_self.done.emit({"tag": tag, "assets": assets, "src": src})
+                    w_self.done.emit({"tag": tag, "assets": assets, "src": src,
+                                      "repo": repo})
                 except Exception as e:
                     w_self.failed.emit(str(e))
 
@@ -480,7 +489,10 @@ class MainWindow(QMainWindow):
         self._update_chk_running = False
         self.act_check_update.setEnabled(True)
         self.status.clearMessage()
-        tag, assets = result.get("tag"), result.get("assets", [])
+        # 版本号统一去掉 v 前缀：显示、比较、文件名、下载 URL 全部按无 v 口径
+        tag = str(result.get("tag") or "").lstrip("vV")
+        repo = str(result.get("repo") or D.REPO)
+        assets = result.get("assets", [])
         if not tag:
             if not silent:
                 QMessageBox.warning(self, "检测更新失败", "发布服务器未返回版本信息。")

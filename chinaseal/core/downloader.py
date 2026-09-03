@@ -108,7 +108,7 @@ def _request(url: str, timeout: int = 30):
 
 
 def chinaseal_log_dir() -> str:
-    """诊断日志目录：%LOCALAPPDATA%\ChinaSeal（软件各模块共用）。"""
+    r"""诊断日志目录：%LOCALAPPDATA%\ChinaSeal（软件各模块共用）。"""
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
     d = os.path.join(base, "ChinaSeal")
     os.makedirs(d, exist_ok=True)
