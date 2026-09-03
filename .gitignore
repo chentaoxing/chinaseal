@@ -14,6 +14,6 @@ fonts_repo/*.part
 *.swo
 Thumbs.db
 *.egg-info/
-build_tools/
+build_tools/.tmp_*
 .tmp_*.py
 *-portable.zip
