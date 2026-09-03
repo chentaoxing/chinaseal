@@ -424,12 +424,12 @@ def staging_dir() -> str:
 
 
 def write_helper_bat(app_dir: str, zip_path: str, out_path: str) -> str:
-    """生成自更新 helper 脚本（5KB）。
+    """生成自更新 helper 脚本。
 
-    helper.bat 行为：
+    helper.bat 行为（每步输出全部写入同目录 helper.log，出问题可查）：
       1. 解压 zip 到 %TEMP%\\ChinaSeal-Update-Staged
       2. 等当前 ChinaSeal.exe 进程消失
-      3. xcopy 把新文件覆盖到 app_dir
+      3. xcopy 把新文件覆盖到 app_dir（/I 防目标歧义交互卡死）
       4. 启动新 ChinaSeal.exe
       5. 自删
     """
@@ -442,25 +442,33 @@ setlocal
 set "APP_DIR={app_dir}"
 set "ZIP=%~1"
 set "STAGED=%TEMP%\\ChinaSeal-Update-Staged"
-if exist "%STAGED%" rd /S /Q "%STAGED%"
-mkdir "%STAGED%"
-echo [update] Extracting...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%ZIP%' -DestinationPath '%STAGED%' -Force"
-echo [update] Waiting for ChinaSeal.exe to exit...
-powershell -NoProfile -Command "$p = Get-Process -Name ChinaSeal -ErrorAction SilentlyContinue; while ($p) {{ Start-Sleep -Seconds 1; $p = Get-Process -Name ChinaSeal -ErrorAction SilentlyContinue }}; exit 0"
-echo [update] Replacing files...
-xcopy /Y /E /Q "%STAGED%\\*" "%APP_DIR%\\" >nul
+set "LOG=%~dp0helper.log"
+echo === ChinaSeal helper start %DATE% %TIME% === > "%LOG%"
+echo APP_DIR=%APP_DIR% >> "%LOG%"
+echo ZIP=%ZIP% >> "%LOG%"
+if exist "%STAGED%" rd /S /Q "%STAGED%" >> "%LOG%" 2>&1
+mkdir "%STAGED%" >> "%LOG%" 2>&1
+echo [1] Extracting... >> "%LOG%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%ZIP%' -DestinationPath '%STAGED%' -Force" >> "%LOG%" 2>&1
+echo [1] Expand-Archive exit=%ERRORLEVEL% >> "%LOG%"
+echo [2] Waiting for ChinaSeal.exe to exit... >> "%LOG%"
+powershell -NoProfile -Command "$p = Get-Process -Name ChinaSeal -ErrorAction SilentlyContinue; while ($p) {{ Start-Sleep -Seconds 1; $p = Get-Process -Name ChinaSeal -ErrorAction SilentlyContinue }}; exit 0" >> "%LOG%" 2>&1
+echo [2] wait exit=%ERRORLEVEL% >> "%LOG%"
+echo [3] Replacing files... >> "%LOG%"
+xcopy /Y /E /I /Q "%STAGED%\\*" "%APP_DIR%\\" >> "%LOG%" 2>&1
+echo [3] xcopy exit=%ERRORLEVEL% >> "%LOG%"
 if not exist "%APP_DIR%\\ChinaSeal.exe" (
-  echo [update] ERROR: ChinaSeal.exe missing after copy - keeping old files.
-  rd /S /Q "%APP_DIR%\\.old" 2>nul
+  echo [!] ERROR: ChinaSeal.exe missing after copy - keeping old files. >> "%LOG%"
+  rd /S /Q "%STAGED%" >> "%LOG%" 2>&1
   exit /b 1
 )
-echo [update] Cleaning staging...
-rd /S /Q "%STAGED%"
-del /F /Q "%ZIP%" 2>nul
-echo [update] Relaunching...
+echo [4] Cleaning staging... >> "%LOG%"
+rd /S /Q "%STAGED%" >> "%LOG%" 2>&1
+del /F /Q "%ZIP%" >> "%LOG%" 2>&1
+echo [5] Relaunching... >> "%LOG%"
 start "" "%APP_DIR%\\ChinaSeal.exe"
 ping -n 2 127.0.0.1 >nul
+echo [6] DONE >> "%LOG%"
 del /F /Q "%~f0"
 '''
     _write_text(out_path, body)

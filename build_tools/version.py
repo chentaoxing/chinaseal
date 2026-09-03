@@ -18,12 +18,12 @@ VSVersionInfo(
           [
             StringStruct('CompanyName', 'chentaoxing'),
             StringStruct('FileDescription', 'ChinaSeal · 中国篆刻印稿工坊'),
-            StringStruct('FileVersion', '0.4.19.0'),
+            StringStruct('FileVersion', '0.4.20.0'),
             StringStruct('InternalName', 'ChinaSeal'),
             StringStruct('LegalCopyright', 'Copyright (C) 2024-2026 chentaoxing'),
             StringStruct('OriginalFilename', 'ChinaSeal.exe'),
             StringStruct('ProductName', '中国篆刻印稿工坊'),
-            StringStruct('ProductVersion', '0.4.19.0'),
+            StringStruct('ProductVersion', '0.4.20.0'),
             StringStruct('Comments', '面向实体篆刻生产流程的数字印稿设计工具 (GPL-3.0-only)')
           ]
         )

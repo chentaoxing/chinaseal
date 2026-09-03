@@ -608,21 +608,22 @@ class MainWindow(QMainWindow):
         self._update_dl.start()
 
     def _prompt_install(self, zip_path: str, tag: str):
-        """下载完成后询问是否立即安装（生成 helper 并重启）。"""
+        """下载完成后询问是否立即安装（生成 helper 覆盖升级并重启软件）。"""
         from PySide6.QtWidgets import QMessageBox
         frozen = getattr(sys, "frozen", False)
         size_mb = os.path.getsize(zip_path) / 1e6 if os.path.exists(zip_path) else 0
         box = QMessageBox(QMessageBox.Icon.Question, "安装更新",
                           f"更新包已下载（{size_mb:.1f} MB）。\n"
-                          "点击「立即安装」后，本程序将关闭并自动完成覆盖升级，然后重新启动。",
+                          "点击「立即安装」后，本软件将关闭，自动完成升级覆盖，"
+                          "然后自动重新启动软件（无需重启电脑）。",
                           parent=self)
-        btn_now = box.addButton("立即安装并重启", QMessageBox.ButtonRole.AcceptRole)
+        btn_now = box.addButton("立即安装并重启软件", QMessageBox.ButtonRole.AcceptRole)
         box.addButton("稍后手动安装", QMessageBox.ButtonRole.RejectRole)
         box.exec()
         if box.clickedButton() is not btn_now:
             QMessageBox.information(self, "已保存更新包",
                                     "更新包位置：\n" + zip_path +
-                                    "\n关闭本程序后，解压覆盖安装目录即可完成升级。")
+                                    "\n关闭本软件后，解压覆盖安装目录即可完成升级。")
             return
         if not frozen:
             QMessageBox.warning(self, "开发模式",
@@ -633,9 +634,13 @@ class MainWindow(QMainWindow):
             helper = os.path.join(U.staging_dir(), "ChinaSeal-Update.bat")
             U.write_helper_bat(app_dir, zip_path, helper)
             import subprocess as _sp
+            # DETACHED_PROCESS | NEW_PG：脱离本进程独立运行；stdin 关死，
+            # 防止任何命令等待输入导致 helper 卡死不退
             _sp.Popen(["cmd", "/c", helper, zip_path], cwd=app_dir,
-                      creationflags=0x00000008 | 0x00000200)  # DETACHED_PROCESS | NEW_PG
-            self._update_log(f"启动更新 helper：{helper}")
+                      stdin=_sp.DEVNULL, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                      creationflags=0x00000008 | 0x00000200)
+            self._update_log(f"启动更新 helper：{helper}（过程日志："
+                             f"{os.path.join(U.staging_dir(), 'helper.log')}）")
             QApplication.quit()
         except Exception as e:
             QMessageBox.critical(self, "安装失败",
