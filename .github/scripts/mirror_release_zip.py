@@ -8,6 +8,7 @@
 幂等：AtomGit 已有同名附件时跳过上传。
 所有出站 URL 过 https+白名单+私网校验，重定向逐跳复检。
 """
+import http.client
 import ipaddress
 import json
 import os
@@ -63,12 +64,13 @@ def _req(url, method="GET", data=None, headers=None, timeout=300):
 
 
 def _req_retry(url, method="GET", data=None, headers=None, timeout=300, tries=3):
-    """下载类请求重试包装：GitHub 直连在部分网络下会中途 reset。"""
+    """下载类请求重试包装：GitHub 直连在部分网络下会中途 reset/IncompleteRead。"""
     last = None
     for n in range(1, tries + 1):
         try:
             return _req(url, method=method, data=data, headers=headers, timeout=timeout)
-        except (ConnectionResetError, TimeoutError, OSError) as e:
+        except (ConnectionResetError, TimeoutError, OSError,
+                http.client.HTTPException) as e:
             last = e
             print(f"  retry {n}/{tries - 1}: {type(e).__name__}: {e}")
     raise last
@@ -115,13 +117,25 @@ def main():
         print("SKIP: AtomGit 已有同名附件")
         return
 
-    # 4) 下载资产（Accept: octet-stream 走资产直链；带重试）
-    st, blob = _req_retry(asset["url"],
-                          headers={"Authorization": f"Bearer {ght}",
-                                   "Accept": "application/octet-stream",
-                                   "User-Agent": UA},
-                          timeout=1800)
-    print(f"GH asset: {fname} {len(blob)/1e6:.1f} MB")
+    # 4) 取得 zip 字节：--local <路径> 直读本地文件（与 GH 资产同源，
+    #    并按 size 字段核对，防传错版本）；否则从 GH 资产下载（CI 内网
+    #    GitHub→GitHub 带宽充足，带重试）
+    blob = None
+    if "--local" in sys.argv:
+        lp = os.path.abspath(sys.argv[sys.argv.index("--local") + 1])
+        assert os.path.isfile(lp), f"本地文件不存在：{lp}"
+        with open(lp, "rb") as f:
+            blob = f.read()
+        if asset.get("size") and len(blob) != int(asset["size"]):
+            raise SystemExit(f"本地文件大小与 GH 资产不符：{len(blob)} != {asset['size']}")
+        print(f"本地文件直读: {os.path.basename(lp)} {len(blob)/1e6:.1f} MB（与 GH 资产一致）")
+    else:
+        st, blob = _req_retry(asset["url"],
+                              headers={"Authorization": f"Bearer {ght}",
+                                       "Accept": "application/octet-stream",
+                                       "User-Agent": UA},
+                              timeout=1800)
+        print(f"GH asset: {fname} {len(blob)/1e6:.1f} MB")
 
     # 5) 取上传地址（含 OBS 必需头）并 PUT
     st, data = _req(f"{AG_API}/releases/{tag}/upload_url?access_token={agt}"
