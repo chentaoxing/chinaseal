@@ -12,10 +12,18 @@ Copyright © 2024-2026 chentaoxing <chentaoxing@gmail.com>, licensed under [GPL-
 
 ## 快速开始
 
-双击 `ChinaSeal.exe` 即可（绿色免安装）。
+从 [Releases](https://github.com/chentaoxing/chinaseal/releases) 下载最新便携包
+（国内可走 [AtomGit 镜像](https://atomgit.com/chentaoxing/chinaseal/releases)同款资产），
+解压后双击 `ChinaSeal.exe` 即可（绿色免安装）。
 
 **首用必做**：工具栏 →「打印校准页」→ 打印后用真实直尺核对 100mm 标尺是否为 100.0mm。
 若不符，请在打印对话框里把缩放设为「实际大小 / 100%」再校准一次。
+
+## 软件内自动更新
+
+「检测更新」→ 下载 →「立即安装并重启**软件**」全程自动（无需重启电脑）。
+下载自动在 AtomGit（国内）与 GitHub 双源间切换，网速过低即换源；
+GitHub API 不可达时回退字体清单源取版本号。
 
 ## MVP 功能
 
@@ -24,8 +32,8 @@ Copyright © 2024-2026 chentaoxing <chentaoxing@gmail.com>, licensed under [GPL-
 | 印文 | 1-9 字网格排版；「单行长条」模式不限字数（引首章/压角章） |
 | 字体 | 扫描系统字体 + 「导入字体文件」支持 ttf/otf/ttc；**缺字检测**：缺字标红并阻止导出，杜绝静默替换 |
 | 内置字体 | 霞鹜文楷（简繁全覆盖）、思源宋体（Noto Serif SC）、LXGW Seal 小篆（预览版，覆盖字数有限）——开源/免费商用授权；列表默认**隐藏可能有商用风险的系统字体**（方正/汉仪/华文/华康/文鼎/蒙纳等），勾选"显示全部字体"可恢复 |
-| 字体下载 | 「下载并添加其他免费开源字体…」：从 GitHub 发布页拉取字体包（因软件体积限制不全部打包），下载到用户目录即点即用 |
-| 关于 | 标题行「关于」菜单：软件版本、检测更新（github.com/chentaoxing/chinaseal）、作者信息 |
+| 字体下载 | 「下载并添加其他免费开源字体…」：GitHub / AtomGit 双源自动切换（记住上次成功源），下载到用户目录即点即用 |
+| 关于 | 标题行「关于」菜单：软件版本、检测更新（自动更新到最新版并重启软件）、作者与项目链接 |
 | 章形 | 方形（长宽联动）、长方形（独立可调）、正圆形（直径可调），5-200mm；内置常用尺寸预设 |
 | 读序 | 现代横排（左→右）/ 传统竖读（右起，右上→右下→左上→左下）/ 回文环读（右上起逆时针）；画布可显示读序编号辅助核对 |
 | 装饰 | 边框（0-5mm，阴刻时边栏与底连为一体）；田字格（仅预览辅助，不导出） |
@@ -46,15 +54,16 @@ Copyright © 2024-2026 chentaoxing <chentaoxing@gmail.com>, licensed under [GPL-
 
 - 字形几何唯一来源：fontTools 轮廓提取（TrueType 二次贝塞尔按规则切分，PDF 侧精确升三次）；画布、PNG、PDF 三端共用同一套毫米坐标路径 → 预览即所得。
 - 填充规则：Qt WindingFill / PDF nonzero，y 翻转下轮廓方向一致，汉字镂空正确。
-- 测试：`pytest tests/`（39 项：读序/圆形布局/轮廓提取/PNG DPI/PDF/工程文件往返/GUI 全按钮链路冒烟）。
+- 测试：`pytest tests/`（44 项：读序/圆形布局/轮廓提取/PNG DPI/PDF/工程文件往返/GUI 全按钮链路冒烟/更新链路）。
 - 样张：`out/samples/`（已视觉验收）。
 
-## 二阶段（未实现，已在需求共识中约定）
+## 二阶段（部分已实现，其余在需求共识中约定）
 
-刻制安全检查（最小线宽 0.3mm/间距 0.2mm + 自动优化）、篆书字体调研与软件内下载器（仅限中国本土源）、拼版打印、多行长文、SVG 导出、AI 设计扩展点。
+已实现：软件内字体下载器（双源 + 已下载置灰 + 授权均为 OFL-1.1）、单行长条排版。
+待实现：刻制安全检查（最小线宽/间距 + 自动优化）、拼版打印、多行长文、SVG 导出、AI 设计扩展点。
 
 ---
-源码：`E:\Agent\Date\ZCode\workspace\ChinaSeal\` · 需求共识：`docs/需求共识文档.md`
+源码即本仓库（克隆后 `pip install -r requirements.txt` 运行）；需求共识：`docs/需求共识文档.md`
 
 ---
 
@@ -86,14 +95,15 @@ PySide6 (Qt) 以 LGPL-3.0-only 授权发布。本软件以 PyInstaller 打包为
 |---|---|---|
 | LXGW WenKai | 默认中文字体（简繁覆盖） | OFL-1.1 |
 | Noto Serif CJK SC | 思源宋体 | OFL-1.1 |
+| Noto Sans CJK SC | 思源黑体（备选大字库） | OFL-1.1 |
 | LXGW Seal | 小篆预览版 | OFL-1.1 |
 
-下载字体（fonts_repo/）：9 款免费开源中文字体供软件内下载（思源黑体 / 得意黑 / 站酷快乐体 / 站酷小薇 / 站酷庆科黄油 / 马善政楷 / 龙藏 / 之芒行书 / 柳建毛草），均为 OFL-1.1。
+软件内可下载字体（fonts_repo/）：11 款免费开源中文字体（思源黑体 / 得意黑 / 站酷快乐体 / 站酷小薇 / 站酷庆科黄油 / 马善政楷 / 龙藏 / 之芒行书 / 柳建毛草 / 封封篆书 / 香萃刻宋），均为 OFL-1.1。
 
 ## 仓库
 
 - 主仓库：[github.com/chentaoxing/chinaseal](https://github.com/chentaoxing/chinaseal)
-- 国内镜像：[atomgit.com/chentaoxing/chinaseal](https://atomgit.com/chentaoxing/chinaseal)（只读同步）
+- 国内镜像：[atomgit.com/chentaoxing/chinaseal](https://atomgit.com/chentaoxing/chinaseal)（代码与发布资产自动同步；亦是软件内字体下载与更新的国内源）
 
 ## 作者
 
